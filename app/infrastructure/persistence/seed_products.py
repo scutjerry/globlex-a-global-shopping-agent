@@ -188,6 +188,65 @@ _EXTRA_SPECS: list[tuple] = [
      ["CN", "US", "EU"], [("S1", "钛原色两件", 429.0, "CNY", 28)], [("材质", "纯钛，无涂层")]),
 ]
 
+# 数据底座演示语料：全部为项目自建的虚构商品及文案，不含第三方品牌、图片、评论或
+# 平台抓取内容。覆盖 CN / US / EU 三个目标市场，供结构化入库与检索评测使用。
+_COMPLIANT_DEMO_SPECS: list[tuple] = [
+    ("P1061", "AtlasFold 可折叠旅行背包 28L", "AtlasFold", "旅行装备", "CN", "28L 折叠背包 城市旅行 轻量 防泼水 可登机", ["CN", "US", "EU"], [("S1", "深灰", 179.0, "CNY", 90)], [("容量", "28L")]),
+    ("P1062", "CloudRest U型旅行颈枕", "CloudRest", "旅行装备", "CN", "U型颈枕 可拆洗 长途飞行 高铁 午休 支撑", ["CN", "US", "EU"], [("S1", "雾蓝", 109.0, "CNY", 110)], [("填充", "高弹纤维")]),
+    ("P1063", "RouteMark 行李牌两件套", "RouteMark", "旅行装备", "CN", "行李牌 地址遮挡 卡扣牢固 旅行识别 两件套", ["CN", "US", "EU"], [("S1", "橙色", 39.0, "CNY", 220)], [("套装", "2 件")]),
+    ("P1064", "MetroCase 电子收纳包", "MetroCase", "旅行装备", "CN", "电子收纳包 数据线 充电器 分区 防泼水 出差", ["CN", "US", "EU"], [("S1", "石墨灰", 79.0, "CNY", 150)], [("分区", "6 个弹力位")]),
+    ("P1065", "Daylight 遮阳帽 可调节", "Daylight", "旅行装备", "CN", "可调节遮阳帽 透气 旅行 徒步 城市通勤", ["CN", "US", "EU"], [("S1", "卡其", 69.0, "CNY", 130)], [("帽围", "54-60cm")]),
+    ("P1066", "ClearWave 有线耳机", "ClearWave", "数码配件", "CN", "有线耳机 Type-C 接口 通勤 通话 麦克风 轻便", ["CN", "US", "EU"], [("S1", "白色", 89.0, "CNY", 160)], [("接口", "Type-C")]),
+    ("P1067", "OrbitStand 铝合金平板支架", "OrbitStand", "数码配件", "CN", "平板支架 铝合金 折叠 角度可调 桌面办公", ["CN", "US", "EU"], [("S1", "银色", 119.0, "CNY", 100)], [("兼容", "7-13 英寸")]),
+    ("P1068", "KeyGuard 键盘防尘收纳套", "KeyGuard", "数码配件", "CN", "键盘收纳套 防尘 便携 软内衬 出差 办公", ["CN", "US", "EU"], [("S1", "黑色", 99.0, "CNY", 100)], [("适用", "75% 配列")]),
+    ("P1069", "PixelClean 屏幕清洁套装", "PixelClean", "数码配件", "CN", "屏幕清洁布 清洁喷雾 无酒精 电脑 手机 镜头", ["CN", "US", "EU"], [("S1", "基础套", 49.0, "CNY", 180)], [("内容", "喷雾+两块布")]),
+    ("P1070", "DeskFlow 桌面理线夹 8只装", "DeskFlow", "数码配件", "CN", "桌面理线夹 数据线 固线 8只装 办公 整理", ["CN", "US", "EU"], [("S1", "黑色", 29.0, "CNY", 300)], [("数量", "8 只")]),
+    ("P1071", "MoriCup 双层陶瓷随行杯", "MoriCup", "家居生活", "CN", "双层陶瓷随行杯 咖啡 茶饮 硅胶杯盖 简约", ["CN", "US", "EU"], [("S1", "米白 350ml", 149.0, "CNY", 70)], [("容量", "350ml")]),
+    ("P1072", "SoftLoom 棉麻桌旗", "SoftLoom", "家居生活", "CN", "棉麻桌旗 餐桌布 中性色 易打理 家居", ["CN", "US", "EU"], [("S1", "亚麻色 180cm", 129.0, "CNY", 80)], [("材质", "棉麻混纺")]),
+    ("P1073", "WarmNest 绒面靠垫", "WarmNest", "家居生活", "CN", "绒面靠垫 客厅 卧室 抱枕 中性色 可拆洗", ["CN", "US", "EU"], [("S1", "暖灰 45cm", 99.0, "CNY", 120)], [("填充", "聚酯纤维")]),
+    ("P1074", "PantryJar 玻璃储物罐三件套", "PantryJar", "家居生活", "CN", "玻璃储物罐 密封罐 厨房 收纳 三件套", ["CN", "US", "EU"], [("S1", "透明", 139.0, "CNY", 90)], [("套装", "500/800/1200ml")]),
+    ("P1075", "QuietLight 阅读台灯", "QuietLight", "家居生活", "CN", "阅读台灯 可调角度 柔和照明 学习 办公 桌面", ["CN", "US", "EU"], [("S1", "白色", 199.0, "CNY", 65)], [("模式", "3 档亮度")]),
+    ("P1076", "TrailMug 不锈钢随行杯", "TrailMug", "户外运动", "CN", "不锈钢随行杯 450ml 户外 通勤 防漏 便携", ["CN", "US", "EU"], [("S1", "墨绿", 129.0, "CNY", 100)], [("容量", "450ml")]),
+    ("P1077", "CampTowel 超细纤维速干巾", "CampTowel", "户外运动", "CN", "速干巾 露营 健身 游泳 可收纳 轻量", ["CN", "US", "EU"], [("S1", "蓝色 L", 59.0, "CNY", 190)], [("尺寸", "80x130cm")]),
+    ("P1078", "PeakCap 可调节徒步帽", "PeakCap", "户外运动", "CN", "徒步帽 透气 可调节 帽檐 防晒 户外", ["CN", "US", "EU"], [("S1", "岩灰", 79.0, "CNY", 140)], [("帽围", "54-60cm")]),
+    ("P1079", "FieldNote 防泼水笔记本", "FieldNote", "户外运动", "CN", "防泼水笔记本 户外记录 旅行日志 便携", ["CN", "US", "EU"], [("S1", "棕色", 45.0, "CNY", 200)], [("页数", "96 页")]),
+    ("P1080", "PaceBottle 运动水壶 700ml", "PaceBottle", "户外运动", "CN", "运动水壶 700ml 徒步 骑行 防漏 宽口 易清洗", ["CN", "US", "EU"], [("S1", "海蓝", 69.0, "CNY", 150)], [("容量", "700ml")]),
+    ("P1081", "HarborMat 可折叠野餐垫", "HarborMat", "户外运动", "CN", "野餐垫 可折叠 防潮 公园 露营 便携", ["CN", "US", "EU"], [("S1", "格纹", 119.0, "CNY", 75)], [("尺寸", "150x180cm")]),
+    ("P1082", "NorthStar 指南针钥匙扣", "NorthStar", "户外运动", "CN", "指南针钥匙扣 旅行 徒步 方向识别 轻便", ["CN", "US", "EU"], [("S1", "银灰", 35.0, "CNY", 210)], [("重量", "25g")]),
+    ("P1083", "LumaClip 反光挂扣两只装", "LumaClip", "户外运动", "CN", "反光挂扣 背包 夜行 可见性 两只装", ["CN", "US", "EU"], [("S1", "荧光黄", 29.0, "CNY", 250)], [("套装", "2 只")]),
+    ("P1084", "BreezeWrap 多用途头巾", "BreezeWrap", "户外运动", "CN", "多用途头巾 徒步 骑行 防风 吸汗 轻便", ["CN", "US", "EU"], [("S1", "深蓝", 39.0, "CNY", 230)], [("材质", "涤纶弹力布")]),
+]
+
+
+# 全球精选演示目录：所有品牌、商品文本、价格和库存均为项目自建虚构数据。
+# 覆盖更多产地、结算币种与目的市场，用于检索、筛选和 Docker 演示，不能用于真实采购或合规判断。
+_GLOBAL_DEMO_SPECS: list[tuple] = [
+    ("P1101", "CedarWay 再生羊毛旅行毯", "CedarWay", "旅行装备", "CA", "再生羊毛旅行毯 飞机 车载 披肩 加拿大设计 可收纳", ["CA", "US", "GB", "EU"], [("S1", "枫叶红 / 130x180cm", 68.0, "CAD", 42)], [("材质", "70% 再生羊毛"), ("适用", "航班与公路旅行")]),
+    ("P1102", "HarborTone 防水蓝牙音箱", "HarborTone", "数码配件", "US", "IP67 防水 蓝牙音箱 露营 海边 12小时续航", ["US", "CA", "MX", "AU"], [("S1", "海军蓝", 79.0, "USD", 64)], [("防护", "IP67"), ("续航", "最长 12 小时")]),
+    ("P1103", "Moss & Mile 皮革护照夹", "Moss & Mile", "旅行装备", "GB", "植鞣皮护照夹 多卡位 登机牌收纳 英伦旅行", ["GB", "EU", "US", "SG"], [("S1", "橄榄棕", 42.0, "GBP", 38)], [("材质", "植鞣皮革"), ("卡位", "5 个")]),
+    ("P1104", "Nordlicht 保温咖啡壶 600ml", "Nordlicht", "家居生活", "SE", "双层不锈钢咖啡壶 北欧极简 通勤 野餐 保温", ["SE", "EU", "GB", "JP"], [("S1", "雾银 600ml", 46.0, "EUR", 50)], [("保温", "热饮 8 小时"), ("内胆", "304 不锈钢")]),
+    ("P1105", "AlpenForm 折叠雨伞 防风款", "AlpenForm", "旅行装备", "DE", "折叠伞 防风骨架 快干伞布 城市旅行 德国设计", ["DE", "EU", "GB", "US"], [("S1", "石板灰", 39.0, "EUR", 72)], [("抗风", "8 骨结构"), ("收纳", "28cm")]),
+    ("P1106", "Lumière 旅行香氛蜡烛套", "Lumière", "家居生活", "FR", "大豆蜡旅行蜡烛 法式柑橘木香 礼赠 家居氛围", ["FR", "EU", "GB", "SG"], [("S1", "两只旅行装", 34.0, "EUR", 55)], [("香调", "柑橘与雪松"), ("燃烧", "约 18 小时")]),
+    ("P1107", "TerraSole 轻量步行凉鞋", "TerraSole", "户外运动", "IT", "旅行凉鞋 软木鞋床 防滑 鞋带可调 城市步行", ["IT", "EU", "US", "AU"], [("S1", "沙岩色 39", 72.0, "EUR", 33), ("S2", "沙岩色 42", 72.0, "EUR", 28)], [("鞋床", "软木复合"), ("鞋底", "防滑橡胶")]),
+    ("P1108", "SakuraNote 和纸旅行手账", "SakuraNote", "家居生活", "JP", "和纸手账 旅行记录 钢笔友好 轻薄 A6 日本制", ["JP", "SG", "AU", "US"], [("S1", "樱花白 A6", 1800.0, "JPY", 90)], [("纸张", "80g 和纸"), ("页数", "160 页")]),
+    ("P1109", "SeoulFrame 磁吸手机支架", "SeoulFrame", "数码配件", "KR", "磁吸手机支架 桌面 视频通话 折叠 轻巧", ["KR", "JP", "SG", "US"], [("S1", "钛灰", 28000.0, "KRW", 85)], [("角度", "多角度调节"), ("重量", "96g")]),
+    ("P1110", "StraitsPack 防泼水通勤托特包", "StraitsPack", "旅行装备", "SG", "通勤托特包 防泼水 15寸电脑隔层 新加坡热带通勤", ["SG", "MY", "TH", "AU"], [("S1", "雨林绿", 79.0, "SGD", 46)], [("隔层", "15 英寸电脑位"), ("面料", "防泼水尼龙")]),
+    ("P1111", "Coastline 速干沙滩巾", "Coastline", "户外运动", "AU", "速干沙滩巾 轻量 吸水 海边 露营 澳大利亚设计", ["AU", "NZ", "SG", "US"], [("S1", "珊瑚橙 / 80x150cm", 45.0, "AUD", 78)], [("面料", "再生聚酯纤维"), ("收纳", "附网袋")]),
+    ("P1112", "KoruTrail 美利奴徒步袜两双", "KoruTrail", "户外运动", "NZ", "美利奴羊毛徒步袜 透气 快干 旅行 两双装", ["NZ", "AU", "US", "EU"], [("S1", "深灰 M", 39.0, "NZD", 66)], [("材质", "美利奴羊毛混纺"), ("套装", "2 双")]),
+    ("P1113", "MekongCraft 藤编桌面收纳篮", "MekongCraft", "家居生活", "TH", "藤编收纳篮 桌面整理 手工质感 东南亚家居", ["TH", "SG", "MY", "JP"], [("S1", "自然色 小号", 590.0, "THB", 44)], [("材质", "天然藤编"), ("尺寸", "22x16cm")]),
+    ("P1114", "LotusLink 旅行洗漱包", "LotusLink", "旅行装备", "VN", "旅行洗漱包 干湿分离 挂钩设计 轻便 越南制造", ["VN", "SG", "AU", "US"], [("S1", "海盐蓝", 19.0, "USD", 120)], [("分区", "干湿双层"), ("挂钩", "可折叠")]),
+    ("P1115", "MonsoonBean 不锈钢滤杯", "MonsoonBean", "家居生活", "IN", "不锈钢咖啡滤杯 手冲旅行咖啡 可重复使用 印度设计", ["IN", "SG", "AE", "GB"], [("S1", "银色", 1299.0, "INR", 58)], [("材质", "304 不锈钢"), ("滤网", "双层微孔")]),
+    ("P1116", "RioFlex 防水手机袋", "RioFlex", "户外运动", "BR", "防水手机袋 海滩 漂流 触屏挂绳 巴西户外", ["BR", "US", "MX", "PT"], [("S1", "柠檬黄", 49.0, "BRL", 110)], [("防护", "IPX8"), ("兼容", "6.8 英寸以内")]),
+    ("P1117", "DesertLine 旅行茶杯 450ml", "DesertLine", "家居生活", "AE", "不锈钢旅行茶杯 450ml 防漏 沙漠色系 通勤", ["AE", "SA", "SG", "GB"], [("S1", "沙丘金", 79.0, "AED", 36)], [("容量", "450ml"), ("密封", "旋盖防漏")]),
+    ("P1118", "IberiaFold 皮质行李标签", "IberiaFold", "旅行装备", "ES", "皮质行李标签 可替换信息卡 旅行识别 西班牙设计", ["ES", "EU", "GB", "US"], [("S1", "海军蓝", 24.0, "EUR", 95)], [("材质", "再生皮革"), ("结构", "隐私翻盖")]),
+    ("P1119", "CanalGlass 冷萃咖啡瓶", "CanalGlass", "家居生活", "NL", "耐热玻璃冷萃瓶 旅行办公 冷泡茶 荷兰设计", ["NL", "EU", "GB", "SG"], [("S1", "琥珀色 500ml", 29.0, "EUR", 60)], [("容量", "500ml"), ("滤芯", "细密不锈钢")]),
+    ("P1120", "BalticLoop 反光自行车绑带", "BalticLoop", "户外运动", "PL", "反光绑带 骑行旅行 裤脚固定 夜间可见 两条装", ["PL", "EU", "GB", "US"], [("S1", "荧光黄", 12.0, "EUR", 145)], [("可见性", "反光织带"), ("套装", "2 条")]),
+    ("P1121", "MapleCircuit 旅行转换插座", "MapleCircuit", "数码配件", "CA", "旅行转换插座 USB-C 双口 过载保护 北美差旅", ["CA", "US", "GB", "EU"], [("S1", "冰川白", 52.0, "CAD", 40)], [("接口", "2x USB-C + USB-A"), ("保护", "过载保护")]),
+    ("P1122", "KyotoMist 折叠喷雾瓶三只", "KyotoMist", "旅行装备", "JP", "折叠喷雾瓶 分装护理液 旅行随身 三只装", ["JP", "KR", "SG", "AU"], [("S1", "透明 30ml", 1200.0, "JPY", 140)], [("套装", "3 只"), ("结构", "防漏旋盖")]),
+    ("P1123", "FjordSignal 迷你营灯", "FjordSignal", "户外运动", "NO", "迷你营灯 暖光 挂扣 露营 应急 北欧户外", ["NO", "EU", "GB", "CA"], [("S1", "冰川蓝", 35.0, "EUR", 57)], [("亮度", "三档暖光"), ("续航", "约 20 小时")]),
+    ("P1124", "AndesClip 多用途登山扣", "AndesClip", "户外运动", "CL", "铝合金登山扣 旅行挂载 水瓶钥匙 户外 两只装", ["CL", "BR", "US", "AU"], [("S1", "赤陶红", 14.0, "USD", 132)], [("材质", "铝合金"), ("套装", "2 只")]),
+]
+
 
 def _build_extra() -> list[Product]:
     """把紧凑表展开成 Product。"""
@@ -209,6 +268,34 @@ def _build_extra() -> list[Product]:
                 ],
             ),
         )
+    return products
+
+
+def _build_global_demo() -> list[Product]:
+    """展开全球精选虚构目录；数据只服务于 MVP 演示。"""
+    products: list[Product] = []
+    for pid, title, brand, category, origin, desc, ships_to, skus, highlights in _GLOBAL_DEMO_SPECS:
+        products.append(Product(
+            product_id=pid, title=title, brand=brand, category=category,
+            origin_country=origin, description=desc, ships_to=list(ships_to),
+            highlights=[ProductHighlight(name, value) for name, value in highlights],
+            skus=[_sku(f"{pid}-{suffix}", spec, major, currency, stock)
+                  for suffix, spec, major, currency, stock in skus],
+        ))
+    return products
+
+
+def _build_compliant_demo() -> list[Product]:
+    """展开自建虚构目录；仅用于开发、演示和召回评测。"""
+    products: list[Product] = []
+    for pid, title, brand, category, origin, desc, ships_to, skus, highlights in _COMPLIANT_DEMO_SPECS:
+        products.append(Product(
+            product_id=pid, title=title, brand=brand, category=category,
+            origin_country=origin, description=desc, ships_to=list(ships_to),
+            highlights=[ProductHighlight(name, value) for name, value in highlights],
+            skus=[_sku(f"{pid}-{suffix}", spec, major, currency, stock)
+                  for suffix, spec, major, currency, stock in skus],
+        ))
     return products
 
 
@@ -381,4 +468,6 @@ def build_seed_products() -> list[Product]:
             ],
         ),
         *_build_extra(),
+        *_build_compliant_demo(),
+        *_build_global_demo(),
     ]

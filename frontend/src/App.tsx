@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import EventTimeline from "./components/EventTimeline";
 import ProductCards from "./components/ProductCards";
-import type { TradeEvent } from "./types";
+import ChatOrderDraft from "./components/ChatOrderDraft";
+import OrderCenter from "./components/OrderCenter";
+import type { CreatedSimulatedOrder, ProductCard, TradeEvent } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000";
-const WS_BASE = API_BASE.replace(/^http/, "ws");
+// 生产容器使用 Nginx 同源代理；本地独立 Vite 仍可通过 VITE_API_BASE / VITE_WS_BASE 覆盖。
+const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
+const WS_BASE =
+  import.meta.env.VITE_WS_BASE ??
+  `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`;
 
 function loadOrCreate(key: string, prefix: string): string {
   const existing = localStorage.getItem(key);
@@ -28,6 +33,12 @@ export default function App() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [activeView, setActiveView] = useState<"chat" | "orders">("chat");
+  // Capability tokens are intentionally memory-only. They are never passed to the Agent,
+  // persisted in browser storage, rendered into text, or sent through the websocket.
+  const [controlTokens, setControlTokens] = useState<Record<string, string>>({});
+  const [draftProduct, setDraftProduct] = useState<ProductCard | null>(null);
+  const [createdFromChat, setCreatedFromChat] = useState<CreatedSimulatedOrder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   // WS 订阅：按会话接收 Agent 过程事件（StrictMode 下会双次挂载，用 closed 标记避免早关告警）
@@ -76,6 +87,24 @@ export default function App() {
     };
   }, [sessionId]);
 
+  const handleCreatedFromChat = (created: CreatedSimulatedOrder) => {
+    // Preserve only the first non-empty token from the create response; idempotent replays never erase it.
+    if (created.order_control_token) {
+      setControlTokens((current) => ({ ...current, [created.order_id]: created.order_control_token }));
+    }
+    setCreatedFromChat(created);
+    setDraftProduct(null);
+    // Deliberately stays on the chat view: switching away here previously unmounted the chat and
+    // made the recommended product cards and the draft entry point disappear. The user decides
+    // when to open the order center, via the receipt rendered below.
+  };
+
+  const handleCreateDraft = (product: ProductCard) => {
+    // A new draft supersedes the previous creation receipt.
+    setCreatedFromChat(null);
+    setDraftProduct(product);
+  };
+
   const submit = async () => {
     const query = input.trim();
     if (!query || busy) return;
@@ -110,9 +139,13 @@ export default function App() {
           <span>买家 {buyerId}</span>
           <span className={connected ? "dot on" : "dot off"}>{connected ? "事件流已连接" : "事件流断开"}</span>
         </div>
+        <nav className="view-tabs" aria-label="工作区切换">
+          <button className={activeView === "chat" ? "active" : ""} onClick={() => setActiveView("chat")} type="button">Agent 对话</button>
+          <button className={activeView === "orders" ? "active" : ""} onClick={() => setActiveView("orders")} type="button">模拟订单</button>
+        </nav>
       </header>
 
-      <main>
+      {activeView === "chat" ? <main>
         <section className="chat">
           <div className="turns">
             {turns.map((turn, index) => (
@@ -130,7 +163,20 @@ export default function App() {
             {busy && !streaming && <div className="hint">Agent 正在处理……</div>}
           </div>
 
-          <ProductCards events={events} />
+          <ProductCards events={events} onCreateDraft={handleCreateDraft} />
+          {draftProduct && <ChatOrderDraft key={draftProduct.product_id} apiBase={API_BASE} product={draftProduct} onDismiss={() => setDraftProduct(null)} onCreated={handleCreatedFromChat} />}
+
+          {createdFromChat && (
+            <div className="creation-notice" role="status">
+              <strong>已创建模拟订单 {createdFromChat.order_id}</strong>
+              <span>{createdFromChat.status} · 目的市场 {createdFromChat.destination_country} · {createdFromChat.total_amount_major} {createdFromChat.currency} · {createdFromChat.item_count} 件</span>
+              <small>此订单不会支付、发货或扣减库存。控制令牌只保存在本次会话内存中，取消或删除都需在订单中心完成。</small>
+              <div className="creation-actions">
+                <button type="button" className="primary" onClick={() => setActiveView("orders")}>前往订单中心</button>
+                <button type="button" onClick={() => setCreatedFromChat(null)}>继续挑选商品</button>
+              </div>
+            </div>
+          )}
 
           <div className="composer">
             <textarea
@@ -151,7 +197,7 @@ export default function App() {
         </section>
 
         <EventTimeline events={events} />
-      </main>
+      </main> : <OrderCenter apiBase={API_BASE} controlTokens={controlTokens} setControlTokens={setControlTokens} initialOrderId={createdFromChat?.order_id} />}
     </div>
   );
 }

@@ -1,133 +1,151 @@
-# Globex - 跨境电商 Agent（AgentScope 2.0）
+# Globex — 跨境商品检索 Agent MVP
 
-基于 AgentScope 2.0 的跨境电商超级搜索框 Agent 系统，DDD 洋葱架构落地：
+Globex 是一个基于 AgentScope 2.x 的跨境商品检索与比较演示系统。它采用 DDD 分层、FastAPI、SQLite、Redis、Qdrant 与 React，并提供可 Docker Compose 部署的单一浏览器入口。
 
-- **MainAgent**（CommerceConcierge）：超级框总调度，**持有全部业务工具可直接单干**；
-  内置 Task 计划四件套管理任务清单；满足"可并行 / 上下文隔离 / 链深"任一条件时经 `task_dispatch` 派发子 Agent；
-  发现稳定偏好时经 `remember_preference_tool` 写入长期记忆
-- **SearchAgent**（CatalogSearchAgent）：商品检索专家，query 改写 → **embedding+rerank 二阶段召回**（Qdrant），
-    失败逐级降级（embedding_only → keyword_2gram）；可选 web_search 兜底跨境政策/关税问答
-- **TradeAgent**（OrderTradeAgent）：下单交易专家（订单创建 / 查询 / 取消，买家身份由 ShoppingContext 注入）
+> **MVP 数据与交易边界**：商品、品牌、价格、库存、订单和历史种子地址均为项目自建的虚构演示数据。本版本支持商品检索、比较、版本化静态规则的模拟到手价，以及**受控模拟订单创建、取消与逻辑删除**。聊天 Agent 只推荐目录 SKU，必须由用户在草案卡明确确认后才会创建订单；不支持真实支付、退款、履约、物流、库存预占/变更或真实售后。新模拟订单不收集实际收件地址。
 
-分期设计脉络、关键取舍与踩坑记录见 [docs/设计演进记录.md](docs/设计演进记录.md)。
+完整的范围、费用规则、隐私和 API 契约见 [`docs/SIMULATED_ORDERS_V1_DESIGN.md`](docs/SIMULATED_ORDERS_V1_DESIGN.md) 与 [`docs/MVP_READONLY_ORDERS.md`](docs/MVP_READONLY_ORDERS.md)，商品数据说明见 [`docs/catalog-data-foundation.md`](docs/catalog-data-foundation.md)。
 
-## 技术栈
+## MVP 能力
 
-- Python 3.11 + uv
-- AgentScope 2.x（Agent + ContextConfig 上下文压缩 + Toolkit/FunctionTool + 内置 Task 计划工具
-  + reply_stream 类型化事件流 + TracingMiddleware / ReplyBudgetControlMiddleware / 自定义工具中间件）
-- 检索：OpenAI 兼容 embedding（text-embedding-v4）+ Qdrant（服务端/本地嵌入双形态）+ HTTP Reranker（可降级）
-- 知识库：AgentScope `rag.KnowledgeBase`（品类洞察 Markdown → 切片 → Qdrant）
-- FastAPI + Uvicorn + WebSocket；React 18 + Vite + TS 前端；Docker Compose（app + worker + qdrant + redis + frontend）
-- 持久化：SQLite（SQLAlchemy 2.0 async）存对话流水/事件轨迹/会话状态/订单/偏好；商品目录仍为内存仓储 + 种子数据
-- 缓存与削峰：Redis（可选）——语义缓存 + embedding 缓存 + 幂等键 + Stream 任务队列 + 跨进程事件背板
+- **商品检索 Agent**：自然语言检索、查询改写、向量召回、可选 rerank、关键词降级、价格与目的市场硬过滤；
+- **跨境信息演示**：商品卡可展示模拟到手价（商品小计、运费与关税），数值仅用于功能演示；
+- **长期偏好**：保存和应用稳定的显式偏好；
+- **会话与事件流**：WebSocket 推送模型、工具、计划与最终回答事件；
+- **多国虚构目录**：超过 100 条结构化 SPU，覆盖 CN、US、EU、GB、JP、KR、SG、AU、NZ、TH、MY、AE、BR、CA 等目的市场，以及多种虚构产地和币种；
+- **受控模拟订单中心**：Agent 目录推荐可打开“模拟订单草案”，用户核价后确认创建；可取消或逻辑删除自己的运行时模拟订单。不会支付、履约或变更库存，公开响应不包含买家 ID、姓名、电话、地址、控制令牌或取消原因；
+- **生产式前端容器**：React 静态构建由 Nginx 托管，`/api/*` 反向代理 FastAPI，`/ws/*` 代理 WebSocket。
 
-## 架构
+## 运行时结构
+
+```text
+浏览器 http://localhost:8080
+        │
+        ▼
+Nginx + React 静态站点（frontend）
+  ├── /                 React SPA
+  ├── /api/*            → FastAPI app:8000（去除 /api 前缀）
+  └── /ws/*             → FastAPI WebSocket（去除 /ws 前缀）
+        │
+        ├── app          FastAPI + Agent + SQLite
+        ├── worker       Redis Stream 意图消费
+        ├── redis        缓存、队列与事件背板
+        └── qdrant       商品与知识库向量索引
+```
+
+主要目录：
 
 ```text
 app/
-├── domain/            # 领域层：Product/Sku/Money、Order 状态机、汇率表、关税运费规则、偏好、会话/队列/仓储端口
-├── application/
-│   ├── usecases/      # CatalogSearch（二阶段召回+到手价内联）、PlaceOrder/QueryOrder/CancelOrder
-│   ├── tools/         # product_search、订单三工具、web_search、remember_preference、task_dispatch
-│   ├── agents/        # MainAgent / SearchAgent / TradeAgent 工厂 + Orchestrator + SessionRegistry
-│   └── prompts/       # globex.yml：主 / 子 Agent 系统提示词
-├── infrastructure/    # llm/embedding/qdrant/reranker/tracing、rag 知识库、缓存、队列、韧性与闸门、仓储
-├── presentation/      # FastAPI 路由、WebSocket ConnectionManager、DTO
-├── composition.py     # 装配容器（API 与 worker 共用一份接线）
-└── worker.py          # 意图消费进程入口
-knowledge/             # 品类洞察知识文档（Markdown，服务启动时幂等入库）
-frontend/              # React + Vite 前端：对话流 + 商品卡 + 事件时间线
-eval/                  # 评测用例集 cases.yaml + 回归报告
-docs/                  # 设计演进记录（分期取舍与踩坑档案）
-docker/                # docker-compose.yaml（app + worker + qdrant + redis + frontend）
+├── domain/              Product / Sku / Money / Order / 仓储端口
+├── application/         Agent、检索与受控模拟订单用例、工具、提示词
+├── infrastructure/      SQLite、Redis、Qdrant、模型、缓存、韧性与种子数据
+├── presentation/        FastAPI 路由、WebSocket 与脱敏 DTO
+├── composition.py       API / worker 共用的装配根
+└── worker.py            队列消费者入口
+frontend/                React + Vite 源码、Nginx 生产镜像
+knowledge/               品类洞察 Markdown
+scripts/                 本地运行辅助脚本
+docker/docker-compose.yaml
 ```
 
-关键设计：
+## Docker Compose 部署（推荐）
 
-- **网关配额治理**：`GatewayThrottle` 同时限并发（`LLM_MAX_CONCURRENCY`，默认 2）与请求起点间隔
-  （`LLM_MIN_INTERVAL_SECONDS`）；流式请求的名额持有到流耗尽才释放；瞬时故障指数退避重试，
-  用尽后回退 `LLM_FALLBACK_MODEL` 并发 `model.fallback` 事件（不静默降级）
-- **语义缓存**：相似问句（余弦 ≥ `SEMANTIC_CACHE_THRESHOLD`，默认 0.95）直接复用历史回复，
-  命中即零模型调用并发 `cache.hit` 事件；**写操作意图（下单/取消）与上下文依赖问句不入缓存**，
-  按 buyer 分桶避免跨买家复用
-- **存储可替换**：`SessionStore` / `ConversationStore` / `OrderRepository` / `PreferenceStore` 四个端口，
-  SQLite（默认）/ JSON 文件两套实现共存，换存储只改 `app/composition.py`
-- **异步削峰**：`TaskQueue` 端口 + Redis Stream 实现（消费者组 / ack / pending 重投 / 死信），
-  独立 worker 进程消费；`POST /commerce/intents` **同步语义不变**（内部入队+等结果），
-  另提供 `/commerce/intents/async` + `/commerce/tasks/{id}`；队列是 at-least-once，靠幂等键防重复下单
-- **跨进程事件**：worker 与 API 是两个进程，事件总线接 Redis Pub/Sub 背板后前端仍能收到流式事件；
-  广播带 `origin` 标识以跳过自己发的消息（否则事件会回环投递两次）
-- **主 Agent 单干优先**：MainAgent 与子 Agent 持有同一批业务工具（`build_tools()` 复用），
-  只在"可并行 / 上下文隔离 / 调用链深"时派发
-- **二阶段召回**：embed → Qdrant 向量召回 topN → rerank 精排 topK；降级链
-  embedding_rerank → embedding_only → keyword_2gram，`recall_strategy` 如实标注；
-  价格等硬约束走工具参数结构化过滤（price_max_major），不交给模型
-- **过滤可观测**：被 ship_to / 价格上限挡掉的候选以 `filtered_out`（含 reason）回传，
-  让模型能区分"库里没有"与"有但不满足约束"，避免把超预算商品答成"没有这个商品"
-- **品类洞察 RAG**：`category_insight_tool` 查 `rag.KnowledgeBase`（选购口径、价格区间、避坑点、
-  跨境通则），先给判断标准再给商品清单
-- **上下文工程**：ContextConfig 定制压缩（trigger_ratio 0.75 / reserve_ratio 0.15 + 工具结果截断），
-  摘要落 AgentState.summary 并推送 `context.compressed` 事件；配合 Token 预算中间件收口单轮开销
-- **工具韧性**：ToolResilienceMiddleware 分级超时 + 按工具熔断（closed→open→half_open），
-  触发时返回 [error] 让模型如实告知，不编造数字
-- **真并行**：同一轮内多个 `task_dispatch` 由 2.0 并发批执行（`is_concurrency_safe`），
-  `scripts/verify_parallel.py` 用事件时间戳比对并行/串行墙钟耗时
-- **到手价内联**：传 ship_to 时商品卡自动内联 landed_price（小计+运费+关税，汇率统一折算），
-  比价/运费不单独暴露工具，减少不必要的工具调用轮次
-- **长期记忆**：写路径 remember_preference_tool → JSON 文件 Store；读路径 orchestrator
-  在偏好变化时注入 `<buyer-preferences>` hint，跨会话、跨重启生效
-- **会话持久化**：AgentState 每轮落盘 DATA_DIR/sessions/，服务重启后恢复多轮对话
-- **SubAgent as Tool**：2.0 库级无 subagent 原语（官方 Agent Team 在 agentscope.app 平台层），
-  用 FunctionTool 包装 `task_dispatch(subagent_type, demands)` 实现同等语义
-- **事件流**：reply_stream → token.delta / plan.update；工具自身发布 tool.invoke/tool.result；
-  TradeEventBus 按会话路由 WebSocket
-- **可观测**：全部 Agent 挂 TracingMiddleware，OTEL_EXPORTER_OTLP_ENDPOINT 配置后导出 OTLP Trace
+配置 OpenAI 兼容网关：把配置写进项目根目录的 `.env`（可从 `.env.example` 复制）。
 
-## 启动
+```bash
+cp .env.example .env
+# 编辑 .env：至少填好 LLM_BASE_URL 与 LLM_API_KEY，
+# 并把 LLM_MODEL 设成你的网关实际支持的型号
+
+docker compose -f docker/docker-compose.yaml up -d --build
+```
+
+`.env` 是 `app`/`worker` 的唯一权威来源：它通过 compose 的 `env_file` 注入，宿主机同名环境变量
+（例如机器级的 `LLM_MODEL`）无法覆盖。若某个型号只存在于宿主机环境变量里，容器不会采用它。
+
+打开：**http://localhost:8080**
+
+- 前端页面和 API/WS 使用同源地址；浏览器请求为 `/api/commerce/*` 与 `/ws/commerce/events`。
+- Compose 默认不向宿主机直接暴露 FastAPI `8000`；如需直接调试，可临时为 `app` 添加 `ports: ["8000:8000"]`。
+- SQLite、Redis、Qdrant 数据由 `globex_app-data`、`globex_redis-data`、`globex_qdrant-data` Docker volumes 持久化。
+- 首次启动会幂等补充缺失的虚构商品和模拟订单；不会覆盖既有同 ID 数据。
+
+常用验证：
+
+```bash
+docker compose -f docker/docker-compose.yaml config
+curl http://localhost:8080/healthz
+curl http://localhost:8080/api/health
+```
+
+停止服务：
+
+```bash
+docker compose -f docker/docker-compose.yaml down
+```
+
+## 本地开发
+
+### 后端
 
 ```bash
 uv sync
-# 敏感配置通过环境变量注入（推荐），不落盘、不入库
-export LLM_BASE_URL=<OpenAI 兼容网关地址>
-export LLM_API_KEY=<密钥>
-export LLM_MODEL=qwen-plus   # 可选，缺省 qwen3-max（限流时自动回退 LLM_FALLBACK_MODEL，缺省 qwen-plus）
+cp .env.example .env   # 首次运行：填好 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
 uv run uvicorn app.presentation.server:app --port 8000
+```
 
-# 启用队列削峰时（需 REDIS_URL）另起消费进程：
+应用启动时经 `load_dotenv` 读取同一份 `.env`，并以 `.env` 为准（覆盖进程内同名变量）；
+也可直接用 `scripts/run_qwen_backend.ps1`，它先通过 `scripts/load_env.ps1` 加载 `.env` 再启动。
+
+如启用 Redis 队列，另起一个终端：
+
+```bash
 uv run python -m app.worker
 ```
 
-> 本地开发也可 `cp .env.example .env` 填值兜底（已被 gitignore，勿提交真实密钥）；
-> 同名环境变量优先于 .env。
-
-## API 概览
-
-- `POST /commerce/intents` 提交买家自然语言意图（同步返回最终回复）
-- `WS   /commerce/events` 订阅会话事件流（连上后先发 `{"shopping_session_id": "..."}`）
-- `GET  /commerce/orders/{order_id}` 查询订单
-- `POST /commerce/orders/{order_id}/cancel` 取消订单
-- `GET  /health` 健康检查
-
-## 验证
+### 前端
 
 ```bash
-uv run pytest                          # 137 个单测：domain / 召回降级与过滤回传 / 计价规则 / 记忆持久化 / 压缩策略 / 韧性中间件
-uv run python scripts/smoke_e2e.py    # 端到端冒烟：WS 订阅 + 提交意图，实时打印事件流
-uv run python scripts/verify_parallel.py   # 并行验证：同轮多派 vs 串行的墙钟耗时与事件重叠数对比
-uv run python scripts/eval_regression.py   # 评测回归：13 条 case，LLM judge 按 P0/P1/P2 Rubric 打分出报告
+cd frontend
+npm ci
+npm run dev
 ```
 
-评测 case 支持 `prior_context` 字段：把跨会话已成立的事实（如上一 case 写入的长期偏好）告知 judge，
-否则 judge 只看本会话记录，会把"正确应用历史偏好"误判为"无据添加"。
+Vite 已将 `/api` 和 `/ws` 代理至本机 `http://localhost:8000`，因此无需在浏览器中配置跨域 API 地址。
 
-## Docker 部署
+## 受控模拟订单 API
+
+```text
+POST /commerce/order-quotes
+POST /commerce/orders                   # 必须带 Idempotency-Key
+POST /commerce/orders/{order_id}/cancellations
+DELETE /commerce/orders/{order_id}          # body: one-time control token; logical delete only
+GET  /commerce/orders?limit=1..50
+GET  /commerce/orders/{order_id}
+```
+
+示例（所有金额都是静态规则的演示估算）：
 
 ```bash
-export LLM_BASE_URL=<网关地址> LLM_API_KEY=<密钥>   # 敏感配置走环境变量，compose 透传
-docker compose -f docker/docker-compose.yaml up -d --build   # app + qdrant + frontend
-# 前端 http://localhost:5173  后端 http://localhost:8000
+curl http://localhost:8080/api/commerce/orders
+curl http://localhost:8080/api/commerce/orders/DEMO-CN-24001
+curl -X POST http://localhost:8080/api/commerce/order-quotes \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"product_id":"P1001","sku_id":"P1001-S1","quantity":1}],"destination_country":"US","currency":"USD"}'
 ```
 
-本地开发不依赖 Docker：QDRANT_URL 置空时自动用 qdrant-client 本地嵌入模式（单进程文件锁，
-多实例/生产请用 compose 的 Qdrant 服务端）。
+聊天 Agent 的商品卡只可打开订单草案；草案先请求服务端报价，只有用户点击“确认创建模拟订单”才发起创建。创建只接受虚构目录商品、目的市场和显示币种，不接受真实地址；创建响应一次性返回控制令牌。取消仅适用于运行时创建且处于 `CONFIRMED` 的订单；逻辑删除适用于当前页仍持令牌的 `CONFIRMED` 或 `CANCELLED` 运行时订单，删除后公开列表隐藏、详情为 404，但订单行与幂等审计不会物理删除。公开读取响应仅返回订单号、状态、费用拆分、规则版本、时间、订单行和目的国家；不会返回买家身份、电话号码、详细地址、控制令牌、令牌摘要或取消原因。
+
+## 质量验证
+
+```bash
+uv run pytest
+cd frontend && npm run build
+```
+
+当前测试覆盖领域规则、检索、缓存、队列、SQL 仓储、商品数据底座、Agent 护栏、模拟订单列表与种子幂等性。
+
+## 后续演进
+
+要从受控模拟订单进入真实交易，必须先单独实现真实认证与授权、账户归属、地址与隐私合规、正式报价确认、库存预占、支付/退款状态机、支付回调验证、履约、审计日志和保留策略。不得将当前模拟控制令牌、静态费用规则或模拟写接口直接复用为真实交易能力。

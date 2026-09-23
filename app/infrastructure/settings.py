@@ -19,7 +19,11 @@ from dotenv import load_dotenv
 # 项目根目录（globex-agent/）
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-load_dotenv(PROJECT_ROOT / ".env")
+# .env 是本项目的权威配置来源：这里与 docker 的 env_file、scripts/load_env.ps1 保持同一优先级，
+# 即 .env 覆盖进程里已有的同名变量。默认的 override=False 会让机器级残留变量（例如旧项目遗留的
+# LLM_MODEL）静默压过 .env，进而调用到网关上并不存在的模型。镜像内不含 .env（见 .dockerignore），
+# 因此容器仍然完全由注入的环境变量决定。
+load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 
 @dataclass(frozen=True)

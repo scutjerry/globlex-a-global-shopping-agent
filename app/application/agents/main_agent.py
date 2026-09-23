@@ -2,7 +2,7 @@
 """MainAgent（CommerceConcierge）
 
 跨境电商超级框总调度。基于 AgentScope 2.0 Agent，工具集分四层：
-    1. 全部业务工具（product_search / create_order / query_order / cancel_order / [web_search]）
+    1. MVP 业务工具（product_search / query_order / [web_search]；订单仅脱敏查询）
        ——与子 Agent 持有同一批工具，简单任务主 Agent 直接单干；
     2. 内置 Task 计划四件套（TaskCreate / TaskUpdate / TaskList / TaskGet）
        ——2.0 官方计划管理，挂在 AgentState.tasks_context 上；

@@ -152,6 +152,19 @@ class TestTwoStageRecall:
             abs=0.02,
         )
 
+    async def test_card_exposes_ships_to_so_the_draft_can_limit_destinations(self, indexed):
+        """回归：商品卡此前不含 ships_to，前端草案只能硬编码目的市场为 US，
+        对不寄送 US 的商品（如 P1006）报价必然 422。卡片必须暴露可寄送市场。"""
+        repo, embedder, index = indexed
+        usecase = CatalogSearchUseCase(repo, embedder=embedder, vector_index=index)
+        result = await usecase.execute(ProductSearchSpec(normalized_query="露营灯"))
+        top = result["hits"][0]
+        assert isinstance(top.get("ships_to"), list) and top["ships_to"], "商品卡必须带 ships_to"
+
+        # 种子中确实存在不寄送 US 的商品，这正是草案默认值必须由数据推导的原因。
+        restricted = await repo.find_by_id("P1006")
+        assert restricted is not None and "US" not in restricted.ships_to
+
     async def test_no_landed_price_without_ship_to(self, indexed):
         repo, embedder, index = indexed
         usecase = CatalogSearchUseCase(repo, embedder=embedder, vector_index=index)

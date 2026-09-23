@@ -13,6 +13,11 @@ from app.domain.catalog.product import Product
 
 class ProductRepository(ABC):
     @abstractmethod
+    async def save(self, product: Product) -> None:
+        """保存商品聚合（主要用于 SKU 库存变更）。"""
+        ...
+
+    @abstractmethod
     async def find_by_id(self, product_id: str) -> Optional[Product]:
         ...
 

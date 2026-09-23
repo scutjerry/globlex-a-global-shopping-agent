@@ -52,6 +52,9 @@ class ProductCard:
     origin_country: str
     price_major: float
     currency: str
+    # 可寄送市场：目录公开数据，非隐私字段。前端据此只提供合法的模拟订单目的地，
+    # 避免对不支持的市场发起必然 422 的报价/创建请求。
+    ships_to: list[str]
     highlights: list[str]
     skus: list[dict]
     score: float
@@ -66,6 +69,7 @@ class ProductCard:
             "origin_country": self.origin_country,
             "price_major": self.price_major,
             "currency": self.currency,
+            "ships_to": self.ships_to,
             "highlights": self.highlights,
             "skus": self.skus,
             "score": round(self.score, 4),
@@ -255,6 +259,7 @@ class CatalogSearchUseCase:
             origin_country=product.origin_country,
             price_major=primary.price.to_major_units(),
             currency=primary.price.currency,
+            ships_to=list(product.ships_to),
             highlights=[f"{h.label}：{h.detail}" if h.detail else h.label for h in product.highlights],
             skus=[
                 {

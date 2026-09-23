@@ -9,12 +9,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.domain.buyer.preference import BuyerPreference
 from app.domain.catalog.money import Money
 from app.domain.order.address import Address
-from app.domain.order.order import Order, OrderStatus
+from app.domain.order.order import Order, OrderPricingSnapshot, OrderStatus
 from app.domain.order.order_line import OrderLine
 from app.domain.session.ports.conversation_store import (
     ConversationEventRecord,
@@ -166,6 +167,30 @@ class TestConversationStore:
 
 
 class TestOrderRepository:
+    async def test_bootstrap_upgrades_existing_orders_table_without_deleting_rows(self, tmp_path):
+        database = tmp_path / "legacy-orders.db"
+        legacy = create_async_engine(f"sqlite+aiosqlite:///{database}")
+        try:
+            async with legacy.begin() as conn:
+                await conn.execute(text(
+                    "CREATE TABLE orders ("
+                    "order_id VARCHAR(32) PRIMARY KEY, buyer_id VARCHAR(64), status VARCHAR(16), "
+                    "currency VARCHAR(8), total_amount_minor INTEGER, shipping_address_json JSON, "
+                    "created_at DATETIME, confirmed_at DATETIME, cancelled_at DATETIME, cancel_reason VARCHAR(255))",
+                ))
+                await conn.execute(text(
+                    "INSERT INTO orders (order_id, buyer_id, status, currency, total_amount_minor, shipping_address_json, created_at) "
+                    "VALUES ('LEGACY-1', 'private', 'CONFIRMED', 'CNY', 100, '{}', CURRENT_TIMESTAMP)",
+                ))
+            await bootstrap_schema(legacy)
+            async with legacy.connect() as conn:
+                columns = {row[1] for row in (await conn.execute(text("PRAGMA table_info(orders)"))).all()}
+                count = (await conn.execute(text("SELECT count(*) FROM orders"))).scalar_one()
+            assert {"order_kind", "pricing_json", "control_token_hash", "cancel_reason_code", "deleted_at"} <= columns
+            assert count == 1
+        finally:
+            await legacy.dispose()
+
     async def test_order_roundtrip_preserves_money_and_status(self, engine):
         repo = SqlOrderRepository(engine)
         await repo.save(_order())
@@ -178,26 +203,63 @@ class TestOrderRepository:
         assert restored.lines[0].sku_id == "P1008-S1"
         assert restored.shipping_address.country == "US"
 
-    async def test_cancel_then_save_overwrites_status(self, engine):
+    async def test_simulated_order_roundtrip_preserves_frozen_pricing_and_cancel(self, engine):
         repo = SqlOrderRepository(engine)
-        order = _order()
+        pricing = OrderPricingSnapshot(
+            merchandise_subtotal=Money.from_major_units(178, "CNY"),
+            shipping_amount=Money.from_major_units(25, "CNY"),
+            import_tax_amount=Money.from_major_units(12, "CNY"),
+            destination_country="US", rule_set_version="test-v1", source_ids=("test-source",),
+            source_summary="测试来源", source_status="test_verified", estimate_disclaimer="仅为模拟估算。",
+        )
+        order = Order.place_simulation(
+            "SIM-SQL", "buyer-001", "US", _order().lines, pricing, "a" * 64,
+        )
         await repo.save(order)
-        order.cancel("买家改主意了")
-        await repo.save(order)
-        restored = await repo.find_by_id("GBX-000001")
-        assert restored.status is OrderStatus.CANCELLED
-        assert restored.cancel_reason == "买家改主意了"
-        # 订单行整体重写，不能出现重复行
+        restored = await repo.find_by_id("SIM-SQL")
+        assert restored is not None
+        assert restored.total_amount().amount_in_minor_units == 21500
+        assert restored.pricing is not None and restored.pricing.rule_set_version == "test-v1"
+        assert restored.pricing.source_summary == "测试来源"
+        assert restored.pricing.source_status == "test_verified"
+        assert await repo.cancel_if_confirmed("SIM-SQL", "a" * 64) is True
+        restored = await repo.find_by_id("SIM-SQL")
+        assert restored is not None and restored.status is OrderStatus.CANCELLED
+        assert restored.cancel_reason_code == "buyer_requested"
         assert len(restored.lines) == 1
+
+    async def test_logical_delete_hides_sql_order_but_preserves_rows_and_idempotency(self, engine):
+        repo = SqlOrderRepository(engine)
+        pricing = OrderPricingSnapshot(
+            merchandise_subtotal=Money.from_major_units(178, "CNY"),
+            shipping_amount=Money.from_major_units(25, "CNY"),
+            import_tax_amount=Money.from_major_units(12, "CNY"),
+            destination_country="US", rule_set_version="test-v1", source_ids=("test-source",),
+            source_summary="测试来源", source_status="test_verified", estimate_disclaimer="仅为模拟估算。",
+        )
+        order = Order.place_simulation("SIM-SQL-DELETE", "buyer-001", "US", _order().lines, pricing, "d" * 64)
+        await repo.save_new_with_idempotency(order, "k" * 64, "r" * 64)
+        assert await repo.delete_if_allowed(order.order_id, "d" * 64) is True
+        assert await repo.find_by_id(order.order_id) is None
+        assert order.order_id not in [item.order_id for item in await repo.list_orders()]
+        assert await repo.find_idempotency("k" * 64) == (order.order_id, "r" * 64)
+        async with engine.connect() as conn:
+            row = (await conn.execute(text("SELECT status, deleted_at FROM orders WHERE order_id='SIM-SQL-DELETE'"))).one()
+            lines = (await conn.execute(text("SELECT count(*) FROM order_items WHERE order_id='SIM-SQL-DELETE'"))).scalar_one()
+        assert row.status == "DELETED" and row.deleted_at is not None
+        assert lines == 1
+        assert await repo.delete_if_allowed(order.order_id, "d" * 64) is False
 
     async def test_missing_order_returns_none(self, engine):
         assert await SqlOrderRepository(engine).find_by_id("GBX-999999") is None
 
-    async def test_next_order_id_increments(self, engine):
+    async def test_next_order_id_is_random_simulation_identifier(self, engine):
         repo = SqlOrderRepository(engine)
-        assert await repo.next_order_id() == "GBX-000001"
-        await repo.save(_order("GBX-000001"))
-        assert await repo.next_order_id() == "GBX-000002"
+        first = await repo.next_order_id()
+        second = await repo.next_order_id()
+        assert first.startswith("SIM-")
+        assert second.startswith("SIM-")
+        assert first != second
 
 
 class TestPreferenceStore:

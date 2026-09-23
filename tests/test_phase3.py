@@ -17,6 +17,9 @@ from app.application.agents.context_policy import build_context_config
 from app.infrastructure.transient import is_transient_error as _is_transient
 from app.application.tools.category_insight_tool import build_category_insight_tool
 from app.infrastructure.eventbus import TradeEventBus
+from app.infrastructure.embedding.rag_compatible_embedding_model import (
+    RagCompatibleOpenAIEmbeddingModel,
+)
 from app.infrastructure.rag.category_knowledge import bootstrap_category_knowledge
 from app.infrastructure.resilience import (
     CircuitBreakerRegistry,
@@ -67,6 +70,10 @@ async def knowledge_base(tmp_path):
     inserted = await bootstrap_category_knowledge(kb, knowledge_dir=docs)
     assert inserted == 2
     yield kb
+
+
+def test_rag_compatible_embedding_model_forces_one_input_per_request():
+    assert RagCompatibleOpenAIEmbeddingModel._TEXT_BATCH_SIZE == 1
 
 
 class TestCategoryKnowledge:

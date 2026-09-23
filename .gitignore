@@ -8,3 +8,11 @@ eval/report-*.md
 # 召回评测报告同样是每次跑测的产物，不入库；标注集（eval/*.jsonl）要入库
 eval/recall-report-*.md
 eval/category-recall-report-*.md
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+# 个人资料（简历、面试准备等）属于私有文件，绝不入库
+profile/
+# 浏览器自动化 / 对话与测试日志产物，不入库
+.playwright-mcp/
+# Agent 记忆属于协作记录（非项目本体），仅保留在本机，不入库
+docs/agent-memory.md

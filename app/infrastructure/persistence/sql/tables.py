@@ -39,6 +39,74 @@ class Base(DeclarativeBase):
     pass
 
 
+# 商品目录的数据底座。来源和审核记录与可售商品拆开，避免把“模拟审核通过”
+# 误当作真实认证；生产接入时可替换为供应商授权与人工审核记录。
+class CatalogSourceRow(Base):
+    __tablename__ = "catalog_sources"
+
+    source_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    source_type: Mapped[str] = mapped_column(String(32))
+    license_note: Mapped[str] = mapped_column(Text)
+    imported_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CatalogProductRow(Base):
+    __tablename__ = "catalog_products"
+
+    product_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    title: Mapped[str] = mapped_column(String(255))
+    brand: Mapped[str] = mapped_column(String(128))
+    category: Mapped[str] = mapped_column(String(64), index=True)
+    origin_country: Mapped[str] = mapped_column(String(8))
+    description: Mapped[str] = mapped_column(Text)
+    source_id: Mapped[str] = mapped_column(String(64), ForeignKey("catalog_sources.source_id"))
+    lifecycle_status: Mapped[str] = mapped_column(String(16), default="published", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CatalogSkuRow(Base):
+    __tablename__ = "catalog_skus"
+
+    sku_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    product_id: Mapped[str] = mapped_column(String(32), ForeignKey("catalog_products.product_id"), index=True)
+    spec: Mapped[str] = mapped_column(String(255))
+    price_minor: Mapped[int] = mapped_column(_BigInt)
+    currency: Mapped[str] = mapped_column(String(8))
+    stock: Mapped[int] = mapped_column(Integer)
+
+
+class CatalogHighlightRow(Base):
+    __tablename__ = "catalog_highlights"
+
+    id: Mapped[int] = mapped_column(_AutoPk, primary_key=True, autoincrement=True)
+    product_id: Mapped[str] = mapped_column(String(32), ForeignKey("catalog_products.product_id"), index=True)
+    label: Mapped[str] = mapped_column(String(64))
+    detail: Mapped[str] = mapped_column(String(255))
+
+
+class CatalogMarketRow(Base):
+    __tablename__ = "catalog_markets"
+
+    id: Mapped[int] = mapped_column(_AutoPk, primary_key=True, autoincrement=True)
+    product_id: Mapped[str] = mapped_column(String(32), ForeignKey("catalog_products.product_id"), index=True)
+    market_code: Mapped[str] = mapped_column(String(8))  # CN / US / EU
+
+    __table_args__ = (UniqueConstraint("product_id", "market_code", name="uq_catalog_product_market"),)
+
+
+class CatalogComplianceReviewRow(Base):
+    __tablename__ = "catalog_compliance_reviews"
+
+    id: Mapped[int] = mapped_column(_AutoPk, primary_key=True, autoincrement=True)
+    product_id: Mapped[str] = mapped_column(String(32), ForeignKey("catalog_products.product_id"), index=True)
+    review_status: Mapped[str] = mapped_column(String(32), index=True)
+    markets: Mapped[str] = mapped_column(String(64))
+    rule_set_version: Mapped[str] = mapped_column(String(32))
+    review_note: Mapped[str] = mapped_column(Text)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class ConversationSessionRow(Base):
     __tablename__ = "conversation_sessions"
 
@@ -103,7 +171,23 @@ class OrderRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Logical-deletion audit timestamp. Deleted rows stay private and are omitted from public reads.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancel_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 受控模拟交易新增字段：旧 Docker volume 由 bootstrap_schema 幂等补列。
+    order_kind: Mapped[str] = mapped_column(String(24), default="SEEDED_DEMO")
+    pricing_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    control_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cancel_reason_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class OrderIdempotencyRow(Base):
+    __tablename__ = "order_idempotency_keys"
+
+    key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    order_id: Mapped[str] = mapped_column(String(32), ForeignKey("orders.order_id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class OrderLineRow(Base):

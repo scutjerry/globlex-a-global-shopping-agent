@@ -16,9 +16,11 @@ from pathlib import Path
 from typing import Optional
 
 from agentscope.credential import OpenAICredential
-from agentscope.embedding import OpenAIEmbeddingModel
 from agentscope.rag import ApproxTokenChunker, KnowledgeBase, QdrantStore, TextParser
 
+from app.infrastructure.embedding.rag_compatible_embedding_model import (
+    RagCompatibleOpenAIEmbeddingModel,
+)
 from app.infrastructure.settings import PROJECT_ROOT, Settings
 
 logger = logging.getLogger(__name__)
@@ -37,7 +39,8 @@ def build_category_knowledge_base(settings: Settings) -> KnowledgeBase:
         api_key=settings.embedding_api_key,
         base_url=settings.embedding_base_url,
     )
-    embedding_model = OpenAIEmbeddingModel(
+    # 网关多 input 响应会漏掉后续向量；RAG 适配器以单条批次保证 VectorRecord.vector 始终是 list[float]。
+    embedding_model = RagCompatibleOpenAIEmbeddingModel(
         credential=credential,
         model=settings.embedding_model,
         dimensions=settings.embedding_dim,

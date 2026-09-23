@@ -8,7 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-SUPPORTED_CURRENCIES = ("USD", "EUR", "GBP", "JPY", "CNY", "HKD", "AUD", "CAD", "SGD")
+# MVP 模拟目录覆盖的 ISO-4217 货币。为保持既有 demo 简化，所有币种仍按 100 最小单位换算；
+# 真实结算接入前必须按币种 minor unit（例如 JPY/KRW = 0）重构金额精度策略。
+SUPPORTED_CURRENCIES = (
+    "USD", "EUR", "GBP", "JPY", "CNY", "HKD", "AUD", "CAD", "SGD",
+    "KRW", "THB", "NZD", "INR", "BRL", "AED",
+)
 
 
 @dataclass(frozen=True)

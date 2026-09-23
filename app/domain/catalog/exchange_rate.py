@@ -21,6 +21,12 @@ _RATES_TO_CNY: dict[str, float] = {
     "AUD": 4.70,
     "CAD": 5.20,
     "SGD": 5.30,
+    "KRW": 0.0052,
+    "THB": 0.20,
+    "NZD": 4.35,
+    "INR": 0.085,
+    "BRL": 1.23,
+    "AED": 1.93,
 }
 
 

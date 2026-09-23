@@ -27,11 +27,16 @@ from app.application.harness.loop_detector import LoopDetector
 from app.application.memory.preference_selector import PreferenceSelector
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.usecases.order_usecases import (
-    CancelOrderUseCase,
-    PlaceOrderUseCase,
+    CancelSimulatedOrderUseCase,
+    CreateSimulatedOrderUseCase,
+    DeleteSimulatedOrderUseCase,
+    ListOrdersUseCase,
     QueryOrderUseCase,
+    QuoteSimulatedOrderUseCase,
 )
 from app.domain.queue.ports.task_queue import TaskQueue
+from app.domain.catalog.ports.product_repository import ProductRepository
+from app.domain.order.ports.order_repository import OrderRepository
 from app.infrastructure.cache.cached_embedding_client import CachedEmbeddingClient
 from app.infrastructure.cache.redis_cache import RedisCache
 from app.infrastructure.cache.semantic_cache import SemanticCache
@@ -41,6 +46,8 @@ from app.infrastructure.persistence.in_memory_repositories import (
     InMemoryOrderRepository,
     InMemoryProductRepository,
 )
+from app.infrastructure.persistence.seed_orders import seed_demo_orders_if_missing
+from app.infrastructure.persistence.seed_products import build_seed_products
 from app.infrastructure.persistence.json_file_stores import (
     JsonFileConversationStore,
     JsonFilePreferenceStore,
@@ -50,6 +57,7 @@ from app.infrastructure.persistence.sql.repositories import (
     SqlConversationStore,
     SqlOrderRepository,
     SqlPreferenceStore,
+    SqlProductRepository,
     SqlSessionStore,
     bootstrap_schema,
     create_engine,
@@ -96,9 +104,14 @@ class Container:
     semantic_cache: SemanticCache
     task_queue: Optional[TaskQueue]
     backplane: Optional[RedisEventBackplane]
+    quote_simulated_order: QuoteSimulatedOrderUseCase
+    create_simulated_order: CreateSimulatedOrderUseCase
+    cancel_simulated_order: CancelSimulatedOrderUseCase
+    delete_simulated_order: DeleteSimulatedOrderUseCase
     query_order: QueryOrderUseCase
-    cancel_order: CancelOrderUseCase
-    product_repo: InMemoryProductRepository
+    list_orders: ListOrdersUseCase
+    product_repo: ProductRepository
+    order_repo: OrderRepository
     embedder: Any
     vector_index: QdrantProductIndex
     knowledge_base: Any
@@ -109,8 +122,13 @@ class Container:
         if self.db_engine is not None:
             try:
                 await bootstrap_schema(self.db_engine)
+                if isinstance(self.product_repo, SqlProductRepository):
+                    added = await self.product_repo.seed_if_empty(build_seed_products())
+                    logger.info("商品数据底座已就绪：本次导入 %d 个自建模拟 SPU", added)
+                seeded_orders = await seed_demo_orders_if_missing(self.order_repo)
+                logger.info("受控模拟订单中心已就绪：本次导入 %d 笔固定演示订单", seeded_orders)
             except Exception as err:  # noqa: BLE001
-                logger.warning("数据库建表失败，持久化能力不可用：%s", err)
+                logger.warning("数据库建表或商品目录初始化失败，持久化能力不可用：%s", err)
         if isinstance(self.task_queue, RedisStreamTaskQueue):
             try:
                 await self.task_queue.ensure_group()
@@ -131,7 +149,6 @@ async def build_container() -> Container:
     setup_tracing(settings)
 
     # ---- Infrastructure ----
-    product_repo = InMemoryProductRepository()
     bus = TradeEventBus()
     vector_index = QdrantProductIndex(settings)
     reranker = HttpReranker(settings) if settings.reranker_base_url else None
@@ -169,12 +186,14 @@ async def build_container() -> Container:
     use_database = settings.database_url != "file"
     db_engine = create_engine(settings.database_url) if use_database else None
     if db_engine is not None:
+        product_repo = SqlProductRepository(db_engine)
         order_repo = SqlOrderRepository(db_engine)
         preference_store = SqlPreferenceStore(db_engine)
         session_store = SqlSessionStore(db_engine)
         conversation_store = SqlConversationStore(db_engine)
         logger.info("持久化形态：%s", db_engine.url.get_backend_name())
     else:
+        product_repo = InMemoryProductRepository()
         order_repo = InMemoryOrderRepository()
         preference_store = JsonFilePreferenceStore(settings.data_dir)
         session_store = JsonFileSessionStore(settings.data_dir)
@@ -210,15 +229,19 @@ async def build_container() -> Container:
     catalog_search = CatalogSearchUseCase(
         product_repo, embedder=embedder, vector_index=vector_index, reranker=reranker,
     )
-    place_order = PlaceOrderUseCase(product_repo, order_repo)
+    # 受控模拟交易：HTTP 可创建/取消虚构订单；Agent 仍只装配 query_order 工具。
+    quote_simulated_order = QuoteSimulatedOrderUseCase(product_repo)
+    create_simulated_order = CreateSimulatedOrderUseCase(quote_simulated_order, order_repo)
+    cancel_simulated_order = CancelSimulatedOrderUseCase(order_repo)
+    delete_simulated_order = DeleteSimulatedOrderUseCase(order_repo)
     query_order = QueryOrderUseCase(order_repo)
-    cancel_order = CancelOrderUseCase(product_repo, order_repo)
+    list_orders = ListOrdersUseCase(order_repo)
 
     search_factory = SearchAgentFactory(
         settings, catalog_search, bus, knowledge_base, circuit_registry, throttle,
     )
     trade_factory = TradeAgentFactory(
-        settings, place_order, query_order, cancel_order, bus, circuit_registry, throttle,
+        settings, query_order, bus, circuit_registry, throttle,
     )
     # 偏好选取器：主 Agent 注入与子 Agent 注入共用同一实例，口径不会两头漂。
     # 用带缓存的 embedder：重复的偏好 statement 不会每轮重复 embed。
@@ -251,9 +274,14 @@ async def build_container() -> Container:
         semantic_cache=semantic_cache,
         task_queue=task_queue,
         backplane=backplane,
+        quote_simulated_order=quote_simulated_order,
+        create_simulated_order=create_simulated_order,
+        cancel_simulated_order=cancel_simulated_order,
+        delete_simulated_order=delete_simulated_order,
         query_order=query_order,
-        cancel_order=cancel_order,
+        list_orders=list_orders,
         product_repo=product_repo,
+        order_repo=order_repo,
         embedder=embedder,
         vector_index=vector_index,
         knowledge_base=knowledge_base,

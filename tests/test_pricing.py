@@ -34,7 +34,7 @@ class TestExchangeRate:
 
     def test_reject_unknown_currency(self, rates):
         with pytest.raises(ValueError, match="不支持"):
-            rates.rate("USD", "KRW")
+            rates.rate("USD", "XXX")
 
 
 class TestTariffSchedule:

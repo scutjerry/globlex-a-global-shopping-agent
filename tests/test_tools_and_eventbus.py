@@ -5,27 +5,14 @@ import json
 
 import pytest
 
-from app.application.tools.order_tools import build_create_order_tool
 from app.application.tools.product_search_tool import build_product_search_tool
 from app.application.usecases.catalog_search import CatalogSearchUseCase
-from app.application.usecases.order_usecases import PlaceOrderUseCase
 from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.persistence.in_memory_repositories import (
     InMemoryOrderRepository,
     InMemoryProductRepository,
 )
-
-ADDRESS = {
-    "recipient_name": "张三",
-    "country": "CN",
-    "state": "浙江",
-    "city": "杭州",
-    "address_line": "西湖区某路 1 号",
-    "postal_code": "310000",
-    "phone": "13800000000",
-}
-
 
 class TestTradeEventBus:
     async def test_publish_routes_to_subscriber(self):
@@ -102,29 +89,8 @@ class TestToolsDirectInvoke:
 
         assert response.content[0].text.startswith("[error] price_max_major 非法")
 
-    async def test_create_order_tool_and_error_path(self):
-        bus = TradeEventBus()
-        product_repo = InMemoryProductRepository()
-        tool = build_create_order_tool(PlaceOrderUseCase(product_repo, InMemoryOrderRepository()), bus)
-
-        # 买家身份由 ShoppingContext 注入，而非模型入参
-        token = ShoppingContext.set(
-            ShoppingContextSnapshot(shopping_session_id="s1", buyer_id="b1", locale="zh-CN", currency="CNY"),
-        )
-        try:
-            ok = await tool(
-                items=[{"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 1}],
-                shipping_address=ADDRESS,
-            )
-            snapshot = json.loads(ok.content[0].text)
-            assert snapshot["status"] == "CONFIRMED"
-            assert snapshot["order_id"].startswith("GBX-")
-            assert snapshot["buyer_id"] == "b1"
-
-            bad = await tool(
-                items=[{"product_id": "P9999", "sku_id": "X", "quantity": 1}],
-                shipping_address=ADDRESS,
-            )
-            assert bad.content[0].text.startswith("[error]")
-        finally:
-            ShoppingContext.reset(token)
+    def test_agent_runtime_does_not_register_simulated_order_write_tools(self):
+        from app.application.agents.trade_agent import TradeAgentFactory
+        # The architecture keeps create/cancel exclusively at explicit HTTP boundaries.
+        assert "build_create_order_tool" not in TradeAgentFactory.build_tools.__code__.co_names
+        assert "build_cancel_order_tool" not in TradeAgentFactory.build_tools.__code__.co_names

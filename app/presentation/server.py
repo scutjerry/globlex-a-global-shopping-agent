@@ -6,8 +6,11 @@
     POST /commerce/intents/async           提交买家意图（立即返回 task_id，结果走 WS 或轮询）
     GET  /commerce/tasks/{task_id}         查任务状态（queued / running / done / failed）
     WS   /commerce/events                  订阅会话事件流
-    GET  /commerce/orders/{order_id}       查询订单（直连 UseCase，不过 Agent）
-    POST /commerce/orders/{order_id}/cancel  取消订单（直连 UseCase）
+    POST /commerce/order-quotes            无副作用模拟到手价
+    POST /commerce/orders                  受控创建模拟订单（幂等）
+    POST /commerce/orders/{id}/cancellations  持控制令牌取消模拟订单
+    GET  /commerce/orders                  脱敏模拟订单列表
+    GET  /commerce/orders/{order_id}       脱敏模拟订单详情
     GET  /health                           健康检查（含依赖连通性与队列深度）
 
 启动：
@@ -22,21 +25,32 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, Header, HTTPException, Request, Response, WebSocket
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.order_usecases import OrderItemInput
 from app.composition import Container, build_container
 from app.domain.queue.ports.task_queue import IntentTask, TaskStatus
 from app.presentation.connection import ConnectionManager
 from app.presentation.dto import (
-    CancelOrderRequest,
+    CancelSimulatedOrderRequest,
+    CreatedSimulatedOrderResponse,
+    OrderDetailResponse,
+    OrderLineResponse,
+    OrderListResponse,
+    OrderQuoteResponse,
+    OrderSummaryResponse,
+    SimulatedOrderRequest,
     SubmitIntentRequest,
     SubmitIntentResponse,
 )
@@ -87,6 +101,11 @@ def build_app() -> FastAPI:
             await c.shutdown()
 
     api = FastAPI(title="Globex 跨境电商 Agent", version="0.4.0", lifespan=lifespan)
+
+    @api.exception_handler(RequestValidationError)
+    async def safe_validation_error(_: Request, __: RequestValidationError) -> JSONResponse:
+        """绝不回显 Pydantic 的原始 input，避免 token 或拒绝的 PII 出现在响应中。"""
+        return JSONResponse(status_code=422, content={"detail": "请求格式无效"})
 
     def container() -> Container:
         if "c" not in state:
@@ -184,19 +203,127 @@ def build_app() -> FastAPI:
     async def commerce_events(websocket: WebSocket) -> None:
         await state["connections"].serve(websocket)
 
-    @api.get("/commerce/orders/{order_id}")
-    async def get_order(order_id: str) -> dict:
-        try:
-            return await container().query_order.execute(order_id)
-        except ValueError as err:
-            raise HTTPException(status_code=404, detail=str(err)) from err
+    def _items(body: SimulatedOrderRequest) -> list[OrderItemInput]:
+        return [OrderItemInput(product_id=item.product_id, sku_id=item.sku_id, quantity=item.quantity) for item in body.items]
 
-    @api.post("/commerce/orders/{order_id}/cancel")
-    async def cancel_order_endpoint(order_id: str, body: CancelOrderRequest) -> dict:
+    def _line_responses(lines: list[dict]) -> list[OrderLineResponse]:
+        return [OrderLineResponse(**line) for line in lines]
+
+    def _detail_response(order: dict) -> OrderDetailResponse:
+        return OrderDetailResponse(
+            order_id=order["order_id"], status=order["status"],
+            total_amount_major=order["total_amount_major"], currency=order["currency"],
+            item_count=sum(line["quantity"] for line in order["lines"]),
+            destination_country=order["destination_country"], created_at=order["created_at"],
+            order_kind=order["order_kind"], lines=_line_responses(order["lines"]),
+            merchandise_subtotal_major=order["merchandise_subtotal_major"],
+            shipping_amount_major=order["shipping_amount_major"],
+            import_tax_amount_major=order["import_tax_amount_major"],
+            rule_set_version=order["rule_set_version"], source_summary=order["source_summary"],
+            source_status=order["source_status"], estimate_disclaimer=order["estimate_disclaimer"],
+        )
+
+    @api.post("/commerce/order-quotes", response_model=OrderQuoteResponse)
+    async def quote_simulated_order(body: SimulatedOrderRequest) -> OrderQuoteResponse:
+        """对虚构 SKU 计算静态模拟到手价；不写订单、库存或外部系统。"""
         try:
-            return await container().cancel_order.execute(order_id, body.reason)
+            quote = await container().quote_simulated_order.execute(
+                _items(body), body.destination_country, body.currency,
+            )
         except ValueError as err:
-            raise HTTPException(status_code=400, detail=str(err)) from err
+            logger.info("模拟订单报价被拒绝：%s", type(err).__name__)
+            raise HTTPException(status_code=422, detail="模拟订单请求不符合规则") from err
+        view = quote.public_view()
+        return OrderQuoteResponse(
+            **{key: view[key] for key in (
+                "merchandise_subtotal_major", "shipping_amount_major", "import_tax_amount_major",
+                "landed_total_major", "currency", "destination_country", "rule_set_version",
+                "source_summary", "source_status", "estimate_disclaimer",
+            )},
+            items=_line_responses(view["items"]),
+        )
+
+    @api.post("/commerce/orders", response_model=CreatedSimulatedOrderResponse, status_code=201)
+    async def create_simulated_order(
+        body: SimulatedOrderRequest,
+        response: Response,
+        idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16, max_length=128),
+    ) -> CreatedSimulatedOrderResponse:
+        """明确创建一笔无库存、无支付副作用的模拟订单。"""
+        c = container()
+        normalized = {"items": [item.model_dump() for item in body.items], "destination_country": body.destination_country, "currency": body.currency}
+        request_hash = hashlib.sha256(json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        key_hash = hashlib.sha256(idempotency_key.encode()).hexdigest()
+        try:
+            created = await c.create_simulated_order.execute_with_idempotency(
+                buyer_id="web-simulation", items=_items(body),
+                destination_country=body.destination_country, currency=body.currency,
+                request_key_hash=key_hash, request_hash=request_hash,
+            )
+        except ValueError as err:
+            logger.info("模拟订单创建被拒绝：%s", type(err).__name__)
+            raise HTTPException(status_code=422, detail="模拟订单请求不符合规则") from err
+        except RuntimeError as err:
+            logger.info("模拟订单创建冲突：%s", type(err).__name__)
+            raise HTTPException(status_code=409, detail="模拟订单创建请求冲突") from err
+        if created.reused:
+            # Token is deliberately not reissued on a retry or concurrent duplicate request.
+            response.status_code = 200
+            return CreatedSimulatedOrderResponse(
+                **_detail_response(created.order.public_view()).model_dump(),
+                order_control_token="", control_token_warning="重复请求未重新返回控制令牌；请使用首次创建响应中的令牌。",
+            )
+        return CreatedSimulatedOrderResponse(
+            **_detail_response(created.order.public_view()).model_dump(),
+            order_control_token=created.control_token,
+        )
+
+    @api.delete("/commerce/orders/{order_id}", status_code=204)
+    async def delete_simulated_order(order_id: str, body: CancelSimulatedOrderRequest) -> Response:
+        """逻辑删除当前页面持令牌的运行时模拟订单；不物理删除审计记录。"""
+        try:
+            await container().delete_simulated_order.execute(order_id, body.order_control_token)
+        except LookupError as err:
+            logger.info("模拟订单删除对象不存在：%s", type(err).__name__)
+            raise HTTPException(status_code=404, detail="模拟订单不存在") from err
+        except PermissionError as err:
+            logger.info("模拟订单删除授权失败：%s", type(err).__name__)
+            raise HTTPException(status_code=403, detail="无法执行此模拟订单删除") from err
+        except RuntimeError as err:
+            logger.info("模拟订单删除冲突：%s", type(err).__name__)
+            raise HTTPException(status_code=409, detail="该模拟订单当前不可删除") from err
+        return Response(status_code=204)
+
+    @api.get("/commerce/orders", response_model=OrderListResponse)
+    async def list_orders(limit: int = 20) -> OrderListResponse:
+        try:
+            items = await container().list_orders.execute(limit=limit)
+        except ValueError as err:
+            logger.info("模拟订单列表请求被拒绝：%s", type(err).__name__)
+            raise HTTPException(status_code=422, detail="模拟订单列表请求不符合规则") from err
+        return OrderListResponse(items=[OrderSummaryResponse(**item) for item in items])
+
+    @api.get("/commerce/orders/{order_id}", response_model=OrderDetailResponse)
+    async def get_order(order_id: str) -> OrderDetailResponse:
+        try:
+            return _detail_response(await container().query_order.execute(order_id))
+        except ValueError as err:
+            logger.info("模拟订单详情不存在：%s", type(err).__name__)
+            raise HTTPException(status_code=404, detail="模拟订单不存在") from err
+
+    @api.post("/commerce/orders/{order_id}/cancellations", response_model=OrderDetailResponse)
+    async def cancel_simulated_order(order_id: str, body: CancelSimulatedOrderRequest) -> OrderDetailResponse:
+        try:
+            return _detail_response(await container().cancel_simulated_order.execute(order_id, body.order_control_token))
+        except LookupError as err:
+            logger.info("模拟订单取消对象不存在：%s", type(err).__name__)
+            raise HTTPException(status_code=404, detail="模拟订单不存在") from err
+        except PermissionError as err:
+            logger.info("模拟订单取消授权失败：%s", type(err).__name__)
+            raise HTTPException(status_code=403, detail="无法执行此模拟订单取消") from err
+        except RuntimeError as err:
+            logger.info("模拟订单取消冲突：%s", type(err).__name__)
+            raise HTTPException(status_code=409, detail="该模拟订单当前不可取消") from err
 
     return api
 
