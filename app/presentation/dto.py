@@ -30,7 +30,7 @@ class SimulatedOrderItemRequest(BaseModel):
 
 
 class SimulatedOrderRequest(BaseModel):
-    """新模拟订单只接收商品、目的市场与显示币种，绝不收集真实地址。"""
+    """新订单只接收商品、目的市场与显示币种，不收集详细地址。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -45,7 +45,7 @@ class SimulatedOrderRequest(BaseModel):
 
 
 class OrderSummaryResponse(BaseModel):
-    """订单中心列表行；刻意不包含买家、地址、控制令牌或取消原因。"""
+    """订单中心列表行；刻意不包含买家、地址、控制令牌、内部类型或取消原因。"""
 
     order_id: str
     status: str
@@ -54,12 +54,11 @@ class OrderSummaryResponse(BaseModel):
     item_count: int
     destination_country: str
     created_at: str
-    order_kind: str
+    manageable: bool
 
 
 class OrderListResponse(BaseModel):
     items: list[OrderSummaryResponse]
-    demo_data: bool = True
 
 
 class OrderLineResponse(BaseModel):
@@ -83,7 +82,6 @@ class OrderPricingResponse(BaseModel):
 
 class OrderDetailResponse(OrderSummaryResponse, OrderPricingResponse):
     lines: list[OrderLineResponse]
-    demo_data: bool = True
 
 
 class OrderQuoteResponse(OrderPricingResponse):
@@ -96,7 +94,7 @@ class OrderQuoteResponse(OrderPricingResponse):
 
 class CreatedSimulatedOrderResponse(OrderDetailResponse):
     order_control_token: str
-    control_token_warning: str = "仅此一次返回；请仅在当前页面临时保存以取消模拟订单。"
+    control_token_warning: str = "订单管理凭证仅此一次返回，并仅在当前页面临时保存。"
 
 
 class CancelSimulatedOrderRequest(BaseModel):

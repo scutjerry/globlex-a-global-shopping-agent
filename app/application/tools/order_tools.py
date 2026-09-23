@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """订单 Agent 工具：只允许脱敏查询。
 
-受控模拟订单的创建和取消刻意只通过显式 HTTP 页面流程处理：该流程有前端确认、
+订单创建和取消刻意只通过显式 HTTP 页面流程处理：该流程有前端确认、
 一次性控制令牌和不进入 Agent/事件流的隐私边界。这里不能重新加入写工具。
 
 注意：本模块不能用 ``from __future__ import annotations``（AgentScope schema 生成依赖运行时注解）。
@@ -32,11 +32,11 @@ def _fail(message: str) -> ToolChunk:
 
 def build_query_order_tool(usecase: QueryOrderUseCase, bus: TradeEventBus):
     async def query_order_tool(order_id: str) -> ToolChunk:
-        """查询脱敏的模拟订单详情；不能创建、取消或读取地址/令牌。
+        """查询脱敏的订单详情；不能创建、取消或读取地址/凭证。
 
         Args:
             order_id (`str`):
-                订单号，如 ``DEMO-CN-24001`` 或 ``SIM-ABC123``。
+                订单号，如 ``GBX-CN-24001`` 或 ``GBX-ABC123``。
         """
         session_id = ShoppingContext.current_session_id()
         bus.publish(session_id, "tool.invoke", {"tool": "query_order_tool", "args": {"order_id": order_id}})

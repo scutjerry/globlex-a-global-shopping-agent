@@ -36,13 +36,13 @@ export default function ProductCards({ events, onCreateDraft }: ProductCardsProp
           {card.landed_price && !card.landed_price.unavailable_reason && (
             <div className="landed">
               <div className="landed-total">到手价 {card.landed_price.landed_total_major} {card.landed_price.currency}</div>
-              <div className="landed-detail">小计 {card.landed_price.subtotal_major} + 运费 {card.landed_price.freight_major} + 关税 {card.landed_price.tariff_major}{card.landed_price.de_minimis_applied ? "（免税额度内）" : ""}</div>
+              <div className="landed-detail">商品小计 {card.landed_price.subtotal_major} + 跨境费用 {Number((card.landed_price.freight_major + card.landed_price.tariff_major).toFixed(2))} {card.landed_price.currency}{card.landed_price.de_minimis_applied ? "（免税额度内）" : ""}</div>
             </div>
           )}
           <ul className="highlights">{card.highlights.map((highlight) => <li key={highlight}>{highlight}</li>)}</ul>
           {card.ships_to?.length ? <div className="ship-to">可寄送：{card.ships_to.join(" / ")}</div> : null}
           <div className="skus">{card.skus.map((sku) => <span key={sku.sku_id} className="sku">{sku.spec} · {sku.price_major} {sku.currency} · 库存 {sku.stock}</span>)}</div>
-          {card.skus.length > 0 && <button type="button" className="draft-from-card" onClick={() => onCreateDraft(card)}>创建模拟订单草案</button>}
+          {card.skus.length > 0 && <button type="button" className="draft-from-card" onClick={() => onCreateDraft(card)}>立即购买</button>}
         </article>
       ))}
     </div>

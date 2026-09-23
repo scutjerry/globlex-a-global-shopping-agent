@@ -248,6 +248,172 @@ _GLOBAL_DEMO_SPECS: list[tuple] = [
 ]
 
 
+# 420 SPU 扩容语料：以「商品族 × 属性变体」生成 312 个独立 SPU，保持种子文件可审阅。
+# 每个条目均是 Globex 自建的虚构演示数据；不会使用真实品牌、认证或市场准入承诺。
+# 元组：(品牌前缀, 中文商品名, 关键词化描述, 材质, 核心特征, 使用场景)。
+_EXPANDED_FAMILIES: dict[str, list[tuple[str, str, str, str, str, str]]] = {
+    "旅行装备": [
+        ("CarryMori", "可扩展登机背包", "登机背包 扩容 分区 轻便 差旅 收纳", "再生尼龙", "扩容拉链", "短途飞行"),
+        ("RailNest", "火车旅行收纳包", "旅行收纳 分隔 干湿分离 轻量 高铁", "涤纶防泼水布", "双层分区", "高铁出行"),
+        ("Wayfarer", "折叠衣物整理袋", "衣物整理 折叠 收纳 行李箱 省空间", "棉麻混纺", "可视网格", "行李分装"),
+        ("PortSide", "旅行洗漱挂包", "洗漱包 挂钩 防泼水 分装 出差", "再生聚酯纤维", "展开挂放", "酒店入住"),
+        ("CloudWalk", "轻量城市日用包", "城市背包 轻便 防泼水 通勤 旅行", "再生尼龙", "透气背板", "城市步行"),
+        ("TransitForm", "行李箱内衬收纳盒", "行李箱 内衬 收纳 分区 衣物整理", "牛津布", "可压缩侧壁", "长途旅行"),
+        ("CabinLeaf", "飞机脚踏吊床", "飞机脚踏 吊床 腿部放松 可折叠 长途飞行", "高密度织带", "长度可调", "长途飞行"),
+        ("RainRoute", "旅行防雨罩", "背包防雨罩 防水 收纳 户外 旅行", "防水涂层布", "反光边条", "雨天转乘"),
+        ("PassportLine", "证件分层收纳夹", "护照夹 证件 收纳 RFID 轻薄 出境", "植鞣皮革", "隐私翻页", "过关登机"),
+    ],
+    "户外运动": [
+        ("CampRay", "营地暖光照明灯", "营地 暖光 照明 挂扣 续航 夜间", "铝合金外壳", "三档色温", "帐篷夜读"),
+        ("RidgeStep", "越野徒步护膝", "徒步 护膝 支撑 透气 轻量 山路", "弹力针织布", "硅胶防滑条", "碎石徒步"),
+        ("PineCook", "折叠营地餐桌", "露营 餐桌 折叠 铝合金 便携", "铝合金", "卷收桌面", "营地用餐"),
+        ("TrailPulse", "夜跑反光臂包", "夜跑 臂包 反光 手机 收纳 轻便", "弹力莱卡", "夜间反光", "城市夜跑"),
+        ("SummitSip", "保温运动水壶", "保温 水壶 徒步 防漏 宽口 易清洗", "304 不锈钢", "单手开盖", "山间徒步"),
+        ("RiverKnot", "防水漂流收纳袋", "防水 收纳袋 漂流 涉水 卷口", "TPU 复合布", "卷口密封", "溪流漂流"),
+        ("StonePeak", "折叠坐垫", "折叠 坐垫 防潮 徒步 轻便 露营", "闭孔泡棉", "防潮隔冷", "观景休息"),
+        ("ForestCue", "露营路线标记扣", "路线 标记 反光 挂扣 徒步 营地", "阳极氧化铝", "高可见配色", "营地寻路"),
+    ],
+    "家居生活": [
+        ("HearthMori", "陶瓷手冲滤杯", "陶瓷 滤杯 手冲 咖啡 无塑料 居家", "高温陶瓷", "三孔萃取", "晨间咖啡"),
+        ("LinenTable", "棉麻餐垫", "棉麻 餐垫 天然材质 中性色 易清洗", "棉麻混纺", "双面织纹", "餐桌布置"),
+        ("QuietVessel", "玻璃密封茶罐", "玻璃 茶罐 密封 收纳 茶叶 厨房", "高硼硅玻璃", "竹木盖", "茶叶保存"),
+        ("CedarHome", "木质桌面收纳架", "木质 收纳架 桌面 整理 天然材质", "榉木", "模块拼接", "居家办公"),
+        ("MoriAroma", "无火扩香石", "无火 扩香 石膏 香氛 卧室 小众", "矿物石膏", "缓释香气", "卧室氛围"),
+        ("WarmFold", "可洗针织抱枕套", "针织 抱枕套 可拆洗 中性色 家居", "棉纱", "隐藏拉链", "客厅休闲"),
+        ("PantryWeave", "藤编食品收纳篮", "藤编 收纳篮 厨房 天然材质 透气", "天然藤编", "可叠放", "厨房整理"),
+    ],
+    "数码配件": [
+        ("VoltArc", "旅行氮化镓充电器", "氮化镓 充电器 快充 宽压 旅行 轻便", "阻燃 PC 外壳", "多口功率分配", "差旅充电"),
+        ("EchoNest", "折叠降噪耳罩", "降噪 耳罩 折叠 通勤 飞行 续航", "蛋白皮耳罩", "环境声模式", "飞行休息"),
+        ("PixelRoute", "磁吸手机支架", "磁吸 手机支架 折叠 视频通话 桌面", "铝合金", "多角度转轴", "远程会议"),
+        ("CableCove", "多接口快充数据线", "数据线 多接口 快充 编织 收纳 出差", "编织尼龙", "接口切换", "移动办公"),
+        ("LensTrail", "便携镜头清洁套", "镜头 清洁 相机 屏幕 便携 无酒精", "超细纤维", "防尘收纳盒", "旅行摄影"),
+        ("DeskCurrent", "桌面电源整理盒", "桌面 理线 电源 收纳 插座 整理", "竹纤维复合材", "散热开孔", "桌面办公"),
+    ],
+    "健康护理": [
+        ("CalmOrbit", "旅行热敷眼罩", "热敷 眼罩 旅行 放松 睡眠 可收纳", "亲肤织物", "三档温控", "长途休息"),
+        ("RestLine", "颈肩拉伸带", "颈肩 拉伸 放松 轻便 居家 办公", "弹力织带", "长度刻度", "久坐放松"),
+        ("SoftStep", "旅行足部按摩球", "足部 按摩球 旅行 轻量 收纳 放松", "天然橡胶", "颗粒表面", "步行后放松"),
+        ("BreezeSleep", "可洗睡眠耳塞", "睡眠 耳塞 可洗 收纳 轻便 降低噪音", "医用级硅胶", "分码耳塞头", "酒店休息"),
+        ("WarmMori", "便携热敷腰带", "热敷 腰带 轻量 办公 旅行 放松", "柔软针织面料", "定时断电", "通勤休息"),
+    ],
+    "母婴亲子": [
+        ("LittleRoute", "儿童旅行收纳包", "儿童 旅行 收纳 分区 轻便 亲子", "再生聚酯纤维", "姓名卡位", "亲子出行"),
+        ("TinySip", "儿童便携饮水杯", "儿童 水杯 防漏 便携 吸管 易清洗", "食品级不锈钢", "防呛吸嘴", "公园活动"),
+        ("NestPlay", "折叠游戏收纳垫", "玩具 收纳垫 折叠 亲子 旅行", "棉帆布", "抽绳收束", "候机等待"),
+        ("MoriKid", "儿童餐具收纳盒", "儿童 餐具 收纳 便携 可清洗 出行", "食品级硅胶", "分隔卡槽", "外出用餐"),
+        ("CloudCub", "亲子防晒帽", "亲子 防晒帽 透气 可调节 旅行", "有机棉", "可调帽围", "海边出行"),
+    ],
+    "宠物出行": [
+        ("PawRoute", "宠物旅行饮水瓶", "宠物 饮水瓶 防漏 便携 散步 旅行", "食品级不锈钢", "一体饮水槽", "城市散步"),
+        ("TailNest", "宠物折叠食盆", "宠物 食盆 折叠 易清洗 轻便 出行", "食品级硅胶", "双层容量", "短途旅行"),
+        ("FurTrail", "宠物外出收纳包", "宠物 收纳包 零食 拾便袋 分区 出行", "防泼水尼龙", "快取口袋", "日常遛宠"),
+    ],
+    "办公文具": [
+        ("PaperMori", "差旅硬壳笔记本", "笔记本 差旅 防泼水 记录 轻便 办公", "再生纸", "平摊装订", "移动会议"),
+        ("DeskLeaf", "桌面文件收纳架", "文件 收纳架 桌面 整理 办公 可叠放", "竹木复合材", "可调分格", "家庭办公"),
+        ("NoteRail", "磁吸便签整理板", "便签 磁吸 整理 板 办公 任务管理", "金属面板", "模块磁吸", "项目规划"),
+    ],
+    "服饰配件": [
+        ("MerinoWay", "轻量徒步袜", "徒步袜 透气 快干 轻量 旅行", "美利奴羊毛混纺", "足弓支撑", "徒步旅行"),
+        ("UrbanBrim", "可折叠遮阳帽", "遮阳帽 折叠 透气 防晒 旅行", "再生尼龙", "可调节帽围", "城市观光"),
+        ("CoastLayer", "速干旅行围巾", "围巾 速干 轻便 防风 旅行 收纳", "莫代尔混纺", "多用途系法", "昼夜温差"),
+        ("StepMori", "轻量步行鞋", "步行鞋 轻量 防滑 旅行 透气", "再生网布", "缓震鞋垫", "城市步行"),
+        ("RainCuff", "防泼水旅行手套", "手套 防泼水 触屏 轻便 通勤 旅行", "软壳面料", "触屏指尖", "雨天通勤"),
+        ("CarryBelt", "弹力旅行腰带", "腰带 弹力 无金属 旅行 安检 轻便", "弹力织带", "无金属扣", "过安检"),
+    ],
+    "运动健身": [
+        ("PaceLoop", "跑步腰包", "跑步 腰包 贴身 防汗 手机 收纳", "弹力莱卡", "防晃结构", "城市跑步"),
+        ("YogaMori", "折叠瑜伽垫", "瑜伽垫 折叠 防滑 轻便 旅行", "天然橡胶", "对折收纳", "旅宿练习"),
+        ("CoreTrail", "弹力训练带套组", "训练带 拉伸 健身 收纳 轻量", "天然乳胶", "阻力分级", "居家训练"),
+        ("CycleLeaf", "骑行补给收纳包", "骑行 收纳包 防泼水 补给 轻便", "防泼水尼龙", "快取拉链", "周末骑行"),
+        ("RecoverArc", "运动拉伸滚轮", "拉伸 滚轮 放松 健身 便携 肌肉", "高密度泡棉", "纹理滚压", "训练恢复"),
+    ],
+}
+
+_EXPANDED_CATEGORY_TARGETS = {
+    "旅行装备": 54, "户外运动": 46, "家居生活": 37, "数码配件": 35,
+    "健康护理": 25, "母婴亲子": 20, "宠物出行": 18, "办公文具": 18,
+    "服饰配件": 32, "运动健身": 27,
+}
+
+_EXPANDED_VARIANTS = (
+    ("轻量基础款", "轻便", "雾灰"), ("耐用通勤款", "耐用", "岩黑"),
+    ("天然材质款", "天然材质", "砂岩色"), ("大容量款", "大容量", "海蓝"),
+    ("折叠旅行款", "可折叠", "苔绿"), ("礼赠精选款", "小众设计", "暖棕"),
+)
+
+
+def _expanded_sku_count(index: int) -> int:
+    """新增 312 个 SPU 的 SKU 分布：62×1、150×2、75×3、25×4。"""
+    if index < 62:
+        return 1
+    if index < 212:
+        return 2
+    if index < 287:
+        return 3
+    return 4
+
+
+def _build_expanded_demo() -> list[Product]:
+    """生成扩容目录，确保每条新增商品至少可寄送一个 V1 模拟费用市场。"""
+    products: list[Product] = []
+    market_options = (["CN", "US", "EU"], ["US", "GB", "CA"], ["JP", "CN", "KR"], ["EU", "GB", "JP"])
+    currency_options = ("CNY", "USD", "EUR", "GBP", "JPY")
+    origins = ("CN", "JP", "DE", "US", "KR", "GB", "CA", "SE")
+    pid_number = 1201
+    global_index = 0
+
+    for category, target in _EXPANDED_CATEGORY_TARGETS.items():
+        created = 0
+        for family_index, (brand, noun, keywords, material, feature, scene) in enumerate(_EXPANDED_FAMILIES[category]):
+            for variant_index, (variant, attribute, color) in enumerate(_EXPANDED_VARIANTS):
+                if created >= target:
+                    break
+                product_id = f"P{pid_number}"
+                sku_count = _expanded_sku_count(global_index)
+                currency = currency_options[(global_index + family_index) % len(currency_options)]
+                base_price = 39.0 + ((global_index * 17 + family_index * 13) % 170)
+                skus = [
+                    (
+                        f"S{sku_index + 1}",
+                        f"{color} / {variant} / {sku_index + 1}号规格",
+                        base_price + sku_index * 11.0,
+                        currency,
+                        35 + ((global_index * 11 + sku_index * 17) % 180),
+                    )
+                    for sku_index in range(sku_count)
+                ]
+                products.append(Product(
+                    product_id=product_id,
+                    title=f"{brand} {noun} {variant}",
+                    brand=brand,
+                    category=category,
+                    origin_country=origins[(global_index + family_index) % len(origins)],
+                    description=(
+                        f"{keywords} {attribute} {material} {feature} {scene} "
+                        "跨境精选 多规格可选 适合比较材质 功能与价格"
+                    ),
+                    ships_to=list(market_options[global_index % len(market_options)]),
+                    skus=[_sku(f"{product_id}-{suffix}", spec, price, sku_currency, stock)
+                          for suffix, spec, price, sku_currency, stock in skus],
+                    highlights=[
+                        ProductHighlight("材质", material),
+                        ProductHighlight("特征", feature),
+                        ProductHighlight("适用", scene),
+                        ProductHighlight("选择", attribute),
+                    ],
+                ))
+                pid_number += 1
+                global_index += 1
+                created += 1
+            if created >= target:
+                break
+        if created != target:
+            raise RuntimeError(f"扩容品类数量不足：{category} {created}/{target}")
+    return products
+
+
 def _build_extra() -> list[Product]:
     """把紧凑表展开成 Product。"""
     products: list[Product] = []
@@ -470,4 +636,5 @@ def build_seed_products() -> list[Product]:
         *_build_extra(),
         *_build_compliant_demo(),
         *_build_global_demo(),
+        *_build_expanded_demo(),
     ]

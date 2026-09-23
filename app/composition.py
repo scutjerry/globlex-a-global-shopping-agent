@@ -124,9 +124,9 @@ class Container:
                 await bootstrap_schema(self.db_engine)
                 if isinstance(self.product_repo, SqlProductRepository):
                     added = await self.product_repo.seed_if_empty(build_seed_products())
-                    logger.info("商品数据底座已就绪：本次导入 %d 个自建模拟 SPU", added)
+                    logger.info("商品数据底座已就绪：本次导入 %d 个 SPU", added)
                 seeded_orders = await seed_demo_orders_if_missing(self.order_repo)
-                logger.info("受控模拟订单中心已就绪：本次导入 %d 笔固定演示订单", seeded_orders)
+                logger.info("订单中心已就绪：本次导入 %d 笔历史订单", seeded_orders)
             except Exception as err:  # noqa: BLE001
                 logger.warning("数据库建表或商品目录初始化失败，持久化能力不可用：%s", err)
         if isinstance(self.task_queue, RedisStreamTaskQueue):
@@ -135,7 +135,7 @@ class Container:
             except Exception as err:  # noqa: BLE001
                 logger.warning("队列消费者组创建失败：%s", err)
         await bootstrap_product_index(self.product_repo, self.embedder, self.vector_index)
-        await bootstrap_category_knowledge(self.knowledge_base)
+        await bootstrap_category_knowledge(self.knowledge_base, refresh_existing=True)
 
     async def shutdown(self) -> None:
         await self.vector_index.close()

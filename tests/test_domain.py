@@ -87,7 +87,7 @@ class TestOrderStateMachine:
 
     def test_seeded_order_cannot_cancel(self):
         seed = Order.place("DEMO-1", "buyer-1", _address(), [_line()])
-        with pytest.raises(ValueError, match="固定演示订单不可取消"):
+        with pytest.raises(ValueError, match="历史订单不可取消"):
             seed.cancel("不再需要")
 
     def test_cancel_twice_rejected(self):

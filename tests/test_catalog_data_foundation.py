@@ -2,10 +2,13 @@
 """商品数据底座：结构化入库、来源/审核记录、库存回写。"""
 from __future__ import annotations
 
+from collections import Counter
+
 import pytest
 from sqlalchemy import func, select
 
 from app.infrastructure.persistence.seed_products import build_seed_products
+from app.infrastructure.rag.category_knowledge import KNOWLEDGE_DIR
 from app.infrastructure.persistence.sql.repositories import (
     SqlProductRepository,
     bootstrap_schema,
@@ -16,6 +19,52 @@ from app.infrastructure.persistence.sql.tables import (
     CatalogProductRow,
     CatalogSourceRow,
 )
+
+
+V1_FEE_MARKETS = {"US", "EU", "GB", "JP", "CN"}
+
+
+def test_category_knowledge_covers_all_expanded_catalog_categories():
+    """新增品类必须有可供 category_insight 灌库的知识文档。"""
+    expected_documents = {
+        "travel-gear.md", "digital-accessories.md", "home-living.md", "outdoor-sports.md",
+        "cross-border-guide.md", "health-care.md", "parenting.md", "pet-travel.md",
+        "office-stationery.md", "apparel-accessories.md",
+    }
+    assert {path.name for path in KNOWLEDGE_DIR.glob("*.md")} == expected_documents
+
+
+def test_expanded_seed_catalog_has_retrieval_depth_and_preserves_anchor_products():
+    """420 SPU 的模拟目录应具备规格、亮点和市场维度的排序区分度。
+
+    P1001–P1010 是既有检索测试的顺序/内容锚点，扩容只能在其后追加新商品，
+    不能改动这些固定商品的字段或排序。
+    """
+    products = build_seed_products()
+    by_id = {product.product_id: product for product in products}
+
+    assert len(products) == 420
+    assert [product.product_id for product in products[:10]] == [f"P{number}" for number in range(1001, 1011)]
+    assert by_id["P1001"].title == "Nomadica 旅行三件套（收纳袋+颈枕+眼罩）"
+    assert by_id["P1001"].description == (
+        "帆布加尼龙材质 结实耐磨 抗造 轻便 无塑料感 小众设计师品牌 适合长途飞行 旅行收纳"
+    )
+    assert by_id["P1008"].title == "LumenGo 便携露营灯 可充电"
+
+    assert len({product.product_id for product in products}) == len(products)
+    assert sum(len(product.skus) for product in products) >= 800
+    assert sum(len(product.skus) > 1 for product in products) >= 250
+    assert sum(len(product.highlights) for product in products) >= 1200
+    assert len(Counter(product.category for product in products)) == 10
+
+    new_products = [product for product in products if product.product_id >= "P1201"]
+    assert len(new_products) == 312
+    assert all(set(product.ships_to) & V1_FEE_MARKETS for product in new_products)
+    forbidden_experience_terms = ("模拟", "虚构", "演示")
+    assert all(
+        not any(term in product.searchable_text() for term in forbidden_experience_terms)
+        for product in products
+    )
 
 
 @pytest.mark.asyncio

@@ -6,11 +6,11 @@
     POST /commerce/intents/async           提交买家意图（立即返回 task_id，结果走 WS 或轮询）
     GET  /commerce/tasks/{task_id}         查任务状态（queued / running / done / failed）
     WS   /commerce/events                  订阅会话事件流
-    POST /commerce/order-quotes            无副作用模拟到手价
-    POST /commerce/orders                  受控创建模拟订单（幂等）
-    POST /commerce/orders/{id}/cancellations  持控制令牌取消模拟订单
-    GET  /commerce/orders                  脱敏模拟订单列表
-    GET  /commerce/orders/{order_id}       脱敏模拟订单详情
+    POST /commerce/order-quotes            无副作用到手价
+    POST /commerce/orders                  受控创建订单（幂等）
+    POST /commerce/orders/{id}/cancellations  持控制令牌取消订单
+    GET  /commerce/orders                  脱敏订单列表
+    GET  /commerce/orders/{order_id}       脱敏订单详情
     GET  /health                           健康检查（含依赖连通性与队列深度）
 
 启动：
@@ -215,7 +215,7 @@ def build_app() -> FastAPI:
             total_amount_major=order["total_amount_major"], currency=order["currency"],
             item_count=sum(line["quantity"] for line in order["lines"]),
             destination_country=order["destination_country"], created_at=order["created_at"],
-            order_kind=order["order_kind"], lines=_line_responses(order["lines"]),
+            manageable=order["order_kind"] == "USER_SIMULATION", lines=_line_responses(order["lines"]),
             merchandise_subtotal_major=order["merchandise_subtotal_major"],
             shipping_amount_major=order["shipping_amount_major"],
             import_tax_amount_major=order["import_tax_amount_major"],
@@ -225,14 +225,14 @@ def build_app() -> FastAPI:
 
     @api.post("/commerce/order-quotes", response_model=OrderQuoteResponse)
     async def quote_simulated_order(body: SimulatedOrderRequest) -> OrderQuoteResponse:
-        """对虚构 SKU 计算静态模拟到手价；不写订单、库存或外部系统。"""
+        """按目录 SKU 计算到手价；不写订单、库存或外部系统。"""
         try:
             quote = await container().quote_simulated_order.execute(
                 _items(body), body.destination_country, body.currency,
             )
         except ValueError as err:
-            logger.info("模拟订单报价被拒绝：%s", type(err).__name__)
-            raise HTTPException(status_code=422, detail="模拟订单请求不符合规则") from err
+            logger.info("订单报价被拒绝：%s", type(err).__name__)
+            raise HTTPException(status_code=422, detail="订单请求不符合规则") from err
         view = quote.public_view()
         return OrderQuoteResponse(
             **{key: view[key] for key in (
@@ -249,7 +249,7 @@ def build_app() -> FastAPI:
         response: Response,
         idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16, max_length=128),
     ) -> CreatedSimulatedOrderResponse:
-        """明确创建一笔无库存、无支付副作用的模拟订单。"""
+        """明确创建一笔无库存、无支付副作用的订单。"""
         c = container()
         normalized = {"items": [item.model_dump() for item in body.items], "destination_country": body.destination_country, "currency": body.currency}
         request_hash = hashlib.sha256(json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -261,11 +261,11 @@ def build_app() -> FastAPI:
                 request_key_hash=key_hash, request_hash=request_hash,
             )
         except ValueError as err:
-            logger.info("模拟订单创建被拒绝：%s", type(err).__name__)
-            raise HTTPException(status_code=422, detail="模拟订单请求不符合规则") from err
+            logger.info("订单创建被拒绝：%s", type(err).__name__)
+            raise HTTPException(status_code=422, detail="订单请求不符合规则") from err
         except RuntimeError as err:
-            logger.info("模拟订单创建冲突：%s", type(err).__name__)
-            raise HTTPException(status_code=409, detail="模拟订单创建请求冲突") from err
+            logger.info("订单创建冲突：%s", type(err).__name__)
+            raise HTTPException(status_code=409, detail="订单创建请求冲突") from err
         if created.reused:
             # Token is deliberately not reissued on a retry or concurrent duplicate request.
             response.status_code = 200
@@ -280,18 +280,18 @@ def build_app() -> FastAPI:
 
     @api.delete("/commerce/orders/{order_id}", status_code=204)
     async def delete_simulated_order(order_id: str, body: CancelSimulatedOrderRequest) -> Response:
-        """逻辑删除当前页面持令牌的运行时模拟订单；不物理删除审计记录。"""
+        """逻辑删除当前页面持令牌的运行时订单；不物理删除审计记录。"""
         try:
             await container().delete_simulated_order.execute(order_id, body.order_control_token)
         except LookupError as err:
-            logger.info("模拟订单删除对象不存在：%s", type(err).__name__)
-            raise HTTPException(status_code=404, detail="模拟订单不存在") from err
+            logger.info("订单删除对象不存在：%s", type(err).__name__)
+            raise HTTPException(status_code=404, detail="订单不存在") from err
         except PermissionError as err:
-            logger.info("模拟订单删除授权失败：%s", type(err).__name__)
-            raise HTTPException(status_code=403, detail="无法执行此模拟订单删除") from err
+            logger.info("订单删除授权失败：%s", type(err).__name__)
+            raise HTTPException(status_code=403, detail="无法删除此订单") from err
         except RuntimeError as err:
-            logger.info("模拟订单删除冲突：%s", type(err).__name__)
-            raise HTTPException(status_code=409, detail="该模拟订单当前不可删除") from err
+            logger.info("订单删除冲突：%s", type(err).__name__)
+            raise HTTPException(status_code=409, detail="该订单当前不可删除") from err
         return Response(status_code=204)
 
     @api.get("/commerce/orders", response_model=OrderListResponse)
@@ -299,31 +299,34 @@ def build_app() -> FastAPI:
         try:
             items = await container().list_orders.execute(limit=limit)
         except ValueError as err:
-            logger.info("模拟订单列表请求被拒绝：%s", type(err).__name__)
-            raise HTTPException(status_code=422, detail="模拟订单列表请求不符合规则") from err
-        return OrderListResponse(items=[OrderSummaryResponse(**item) for item in items])
+            logger.info("订单列表请求被拒绝：%s", type(err).__name__)
+            raise HTTPException(status_code=422, detail="订单列表请求不符合规则") from err
+        return OrderListResponse(items=[OrderSummaryResponse(
+            **{key: value for key, value in item.items() if key != "order_kind"},
+            manageable=item["order_kind"] == "USER_SIMULATION",
+        ) for item in items])
 
     @api.get("/commerce/orders/{order_id}", response_model=OrderDetailResponse)
     async def get_order(order_id: str) -> OrderDetailResponse:
         try:
             return _detail_response(await container().query_order.execute(order_id))
         except ValueError as err:
-            logger.info("模拟订单详情不存在：%s", type(err).__name__)
-            raise HTTPException(status_code=404, detail="模拟订单不存在") from err
+            logger.info("订单详情不存在：%s", type(err).__name__)
+            raise HTTPException(status_code=404, detail="订单不存在") from err
 
     @api.post("/commerce/orders/{order_id}/cancellations", response_model=OrderDetailResponse)
     async def cancel_simulated_order(order_id: str, body: CancelSimulatedOrderRequest) -> OrderDetailResponse:
         try:
             return _detail_response(await container().cancel_simulated_order.execute(order_id, body.order_control_token))
         except LookupError as err:
-            logger.info("模拟订单取消对象不存在：%s", type(err).__name__)
-            raise HTTPException(status_code=404, detail="模拟订单不存在") from err
+            logger.info("订单取消对象不存在：%s", type(err).__name__)
+            raise HTTPException(status_code=404, detail="订单不存在") from err
         except PermissionError as err:
-            logger.info("模拟订单取消授权失败：%s", type(err).__name__)
-            raise HTTPException(status_code=403, detail="无法执行此模拟订单取消") from err
+            logger.info("订单取消授权失败：%s", type(err).__name__)
+            raise HTTPException(status_code=403, detail="无法取消此订单") from err
         except RuntimeError as err:
-            logger.info("模拟订单取消冲突：%s", type(err).__name__)
-            raise HTTPException(status_code=409, detail="该模拟订单当前不可取消") from err
+            logger.info("订单取消冲突：%s", type(err).__name__)
+            raise HTTPException(status_code=409, detail="该订单当前不可取消") from err
 
     return api
 

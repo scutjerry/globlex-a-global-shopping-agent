@@ -36,8 +36,10 @@ from app.domain.shipping.tariff_schedule import TariffSchedule
 
 logger = logging.getLogger(__name__)
 
-# 一阶段召回候选数（> top_k，给精排留空间）
-_RECALL_TOP_N = 8
+# 一阶段召回候选数（> top_k，给精排与硬约束过滤留空间）。
+# 目录扩至 420 SPU 后，8 条候选不足以同时承接向量同分、目的市场和预算过滤；
+# 50 仍是受控的小候选集，避免将整库文本交给 reranker。
+_RECALL_TOP_N = 50
 
 # 被硬约束挡掉的候选回传条数上限（只回摘要，避免上下文膨胀）
 _FILTERED_OUT_LIMIT = 3
@@ -185,11 +187,23 @@ class CatalogSearchUseCase:
         vector_hits = await self._vector_index.search(embedding, top_n=_RECALL_TOP_N)
         products = await self._product_repo.find_by_ids([hit.product_id for hit in vector_hits])
         by_id = {product.product_id: product for product in products}
-        return [
+        scored = [
             (hit.score, by_id[hit.product_id])
             for hit in vector_hits
             if hit.product_id in by_id
         ]
+        # 低维测试桩和真实 embedding 都可能出现相同相似度；若不显式破平，Qdrant
+        # 的 point 返回次序会随 collection 规模变化，导致同等语义候选随机翻转。
+        # 只在向量分数相同的情况下使用既有关键词重合度，仍以向量分数为第一排序键。
+        query_terms = tokenize(spec.normalized_query)
+        scored.sort(
+            key=lambda pair: (
+                -pair[0],
+                -self._keyword_score(query_terms, pair[1], spec),
+                pair[1].product_id,
+            ),
+        )
+        return scored
 
     # ---- 二阶段：精排 ----
 
@@ -218,7 +232,7 @@ class CatalogSearchUseCase:
             score = self._keyword_score(query_terms, product, spec)
             if score > 0:
                 candidates.append((score, product))
-        candidates.sort(key=lambda pair: pair[0], reverse=True)
+        candidates.sort(key=lambda pair: (-pair[0], pair[1].product_id))
         return candidates
 
     @staticmethod

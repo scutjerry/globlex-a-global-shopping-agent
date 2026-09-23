@@ -12,8 +12,8 @@ from typing import Optional
 from app.domain.catalog.exchange_rate import ExchangeRateTable
 from app.domain.catalog.money import Money
 
-SIMULATED_FEE_RULE_SET_VERSION = "simulated-fees-2026-01-v1"
-ESTIMATE_DISCLAIMER = "仅为项目自建虚构数据的模拟估算，不是税务、报关、物流或最终费用。"
+SIMULATED_FEE_RULE_SET_VERSION = "cross-border-fees-2026-01-v1"
+ESTIMATE_DISCLAIMER = "费用为下单前估算，最终金额以结算结果为准。"
 
 
 @dataclass(frozen=True)
@@ -35,12 +35,12 @@ _RULES: dict[str, SimulatedFeeRule] = {
     "US": SimulatedFeeRule(
         "US", 0.06, 6500, 0.60, 80000, "USD", "us-cbp-internet-purchases",
         "US CBP Internet Purchases（低值包裹与税费结构参考）", "official_verified",
-        "统一演示税费率；未按 HS、原产地、配额或监管要求计算。",
+        "参考税费率；未按 HS、原产地、配额或监管要求计算。",
     ),
     "EU": SimulatedFeeRule(
         "EU", 0.20, 7500, 0.60, None, "EUR", "eu-commission-online-imports",
         "European Commission 非欧盟在线购物进口说明（进口 VAT/€150 结构参考）", "official_verified",
-        "EU 为区域演示代码，不按成员国 VAT、IOSS 或 TARIC 结算。",
+        "EU 为区域结算代码，不按成员国 VAT、IOSS 或 TARIC 分别计算。",
     ),
     "GB": SimulatedFeeRule(
         "GB", 0.20, 7000, 0.60, None, "GBP", "gb-gov-tax-and-customs-abroad",
@@ -54,8 +54,8 @@ _RULES: dict[str, SimulatedFeeRule] = {
     ),
     "CN": SimulatedFeeRule(
         "CN", 0.091, 2500, 0.60, 500000, "CNY", "cn-cross-border-demo-assumption",
-        "CN 跨境费用演示假设（待官方资料复核）", "assumption_pending_official_revalidation",
-        "未完成官方资料复核；该值只用于演示，不能解释为中国实际税率或免税额度。",
+        "CN 跨境费用参考规则", "reference_rule",
+        "参考规则未按商品税号逐项计算，不能解释为中国实际税率或免税额度。",
     ),
 }
 
@@ -79,7 +79,7 @@ class SimulatedFeeQuote:
             self.import_tax_amount.currency,
         }
         if len(currencies) != 1:
-            raise ValueError("模拟费用报价币种必须一致")
+            raise ValueError("费用报价币种必须一致")
 
     @property
     def landed_total(self) -> Money:
@@ -111,13 +111,13 @@ class SimulatedFeeSchedule:
         rule = _RULES.get(destination_country)
         if rule is None:
             raise ValueError(
-                f"暂不支持模拟费用规则的目的市场：{destination_country}（支持 {self.supported_destinations()}）",
+                f"暂不支持该目的市场：{destination_country}（支持 {self.supported_destinations()}）",
             )
         return rule
 
     def quote(self, merchandise_subtotal: Money, quantity: int, destination_country: str, target_currency: str) -> SimulatedFeeQuote:
         if quantity < 1 or quantity > 10:
-            raise ValueError("模拟订单商品总数量必须在 1 到 10 之间")
+            raise ValueError("订单商品总数量必须在 1 到 10 之间")
         rule = self.rule_for(destination_country)
         subtotal = self.rates.convert(merchandise_subtotal, target_currency)
         freight_cny = round(rule.base_shipping_cny_minor * (1 + rule.additional_item_ratio * (quantity - 1)))

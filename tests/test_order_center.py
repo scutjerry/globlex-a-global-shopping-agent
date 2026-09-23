@@ -157,11 +157,28 @@ def test_order_control_tokens_stay_in_memory_and_agent_has_no_write_tool():
     assert "if (!created.order_control_token) return current;" in center_source
     # The chat draft first requests a quote; only an explicit user confirmation calls POST /orders.
     assert "/commerce/order-quotes" in draft_source
-    assert "确认创建模拟订单" in draft_source
+    assert "确认创建订单" in draft_source
     assert "取消草案" in draft_source
     assert "order_control_token" not in agent_tool_source
     assert "create" not in agent_tool_source.lower()
     assert "delete" not in agent_tool_source.lower()
+
+
+def test_frontend_combines_shipping_and_import_tax_into_cross_border_fee():
+    from pathlib import Path
+
+    card_source = Path("frontend/src/components/ProductCards.tsx").read_text(encoding="utf-8")
+    draft_source = Path("frontend/src/components/ChatOrderDraft.tsx").read_text(encoding="utf-8")
+    center_source = Path("frontend/src/components/OrderCenter.tsx").read_text(encoding="utf-8")
+
+    assert "freight_major + card.landed_price.tariff_major" in card_source
+    assert "shipping_amount_major + quote.import_tax_amount_major" in draft_source
+    assert "shipping_amount_major + order.import_tax_amount_major" in center_source
+    for source in (card_source, draft_source, center_source):
+        assert "跨境费用" in source
+    for source in (draft_source, center_source):
+        assert ">运费：" not in source
+        assert ">进口税费：" not in source
 
 
 def test_order_routes_do_not_return_raw_business_error_messages():
@@ -169,13 +186,32 @@ def test_order_routes_do_not_return_raw_business_error_messages():
 
     source = Path("app/presentation/server.py").read_text(encoding="utf-8")
     assert "detail=str(err)" not in source
-    assert 'detail="模拟订单请求不符合规则"' in source
-    assert 'detail="模拟订单不存在"' in source
+    assert 'detail="订单请求不符合规则"' in source
+    assert 'detail="订单不存在"' in source
+
+
+def test_customer_facing_copy_uses_standard_commerce_language():
+    from pathlib import Path
+
+    public_sources = [
+        Path("app/application/prompts/globex.yml"),
+        Path("frontend/src/App.tsx"),
+        Path("frontend/src/components/ProductCards.tsx"),
+        Path("frontend/src/components/ChatOrderDraft.tsx"),
+        Path("frontend/src/components/OrderCenter.tsx"),
+        Path("app/presentation/dto.py"),
+        Path("app/presentation/server.py"),
+        *Path("knowledge").glob("*.md"),
+    ]
+    forbidden = ("模拟", "虚构", "演示", "SIMULATED ORDER", "DEMO-")
+    for path in public_sources:
+        content = path.read_text(encoding="utf-8")
+        assert not any(term in content for term in forbidden), path
 
 
 def test_demo_orders_only_use_non_sensitive_fixture_data():
     for order in build_demo_orders():
         snapshot = order.snapshot()
-        assert snapshot["order_id"].startswith("DEMO-")
+        assert snapshot["order_id"].startswith("GBX-")
         assert snapshot["shipping_address"]
         assert "@" not in snapshot["shipping_address"]

@@ -38,7 +38,7 @@ export interface ProductCard {
   price_major: number;
   currency: string;
   highlights: string[];
-  // 目录公开数据，非隐私字段。用于把模拟订单草案的目的地限制在商品真正可寄送的市场内。
+  // 目录公开数据，非隐私字段。用于把订单草案的目的地限制在商品真正可寄送的市场内。
   ships_to?: string[];
   skus: { sku_id: string; spec: string; price_major: number; currency: string; stock: number }[];
   score: number;
@@ -80,7 +80,7 @@ export interface OrderSummary {
   item_count: number;
   destination_country: string;
   created_at: string;
-  order_kind: "SEEDED_DEMO" | "USER_SIMULATION";
+  manageable: boolean;
 }
 
 export interface OrderDetail extends OrderSummary, PricingBreakdown {
@@ -102,5 +102,4 @@ export interface CreatedSimulatedOrder extends OrderDetail {
 
 export interface OrderListResponse {
   items: OrderSummary[];
-  demo_data: boolean;
 }

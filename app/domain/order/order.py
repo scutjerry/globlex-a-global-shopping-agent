@@ -97,11 +97,11 @@ class Order:
             raise ValueError("订单费用快照目的市场必须与订单目的市场一致")
         if self.order_kind is OrderKind.USER_SIMULATION:
             if self.pricing is None or not self.control_token_hash:
-                raise ValueError("运行时模拟订单必须有费用快照和控制令牌摘要")
+                raise ValueError("运行时订单必须有费用快照和控制令牌摘要")
             if self.status not in {OrderStatus.CONFIRMED, OrderStatus.CANCELLED, OrderStatus.DELETED}:
-                raise ValueError("运行时模拟订单状态必须为 CONFIRMED、CANCELLED 或 DELETED")
+                raise ValueError("运行时订单状态必须为 CONFIRMED、CANCELLED 或 DELETED")
         if self.status is OrderStatus.DELETED and self.deleted_at is None:
-            raise ValueError("逻辑删除的模拟订单必须记录 deleted_at")
+            raise ValueError("逻辑删除的订单必须记录 deleted_at")
 
     @staticmethod
     def place(order_id: str, buyer_id: str, shipping_address: Address, lines: list[OrderLine]) -> "Order":
@@ -121,11 +121,11 @@ class Order:
     ) -> "Order":
         # 新订单不收集真实地址；仅保存目的市场与非个人化占位符，公开 DTO 不会返回它。
         destination = Address(
-            recipient_name="模拟订单未收集收件人",
+            recipient_name="未收集收件人",
             country=destination_country,
             state="",
-            city="模拟目的地",
-            address_line="模拟订单未收集地址",
+            city="目的市场",
+            address_line="未收集详细地址",
             postal_code="",
             phone="",
         )
@@ -156,7 +156,7 @@ class Order:
     def cancel(self, reason: str = "buyer_requested") -> None:
         """仅模拟订单可取消；不会退款、回补库存或调用外部服务。"""
         if self.order_kind is not OrderKind.USER_SIMULATION:
-            raise ValueError("固定演示订单不可取消")
+            raise ValueError("历史订单不可取消")
         if self.status is not OrderStatus.CONFIRMED:
             raise ValueError(f"仅 CONFIRMED 态可取消，当前={self.status.value}：{self.order_id}")
         if not reason or not reason.strip():
@@ -177,9 +177,9 @@ class Order:
     def delete(self) -> None:
         """逻辑删除模拟订单；保留最小审计记录和幂等键，不执行外部或库存副作用。"""
         if self.order_kind is not OrderKind.USER_SIMULATION:
-            raise ValueError("固定演示订单不可删除")
+            raise ValueError("历史订单不可删除")
         if not self.is_deletable:
-            raise ValueError(f"该模拟订单当前不可删除：{self.order_id}")
+            raise ValueError(f"该订单当前不可删除：{self.order_id}")
         self.status = OrderStatus.DELETED
         self.deleted_at = _now()
 
@@ -231,9 +231,9 @@ class Order:
                 "shipping_amount_major": 0.0,
                 "import_tax_amount_major": 0.0,
                 "rule_set_version": "legacy-seed-v1",
-                "source_summary": "固定演示订单历史快照",
+                "source_summary": "历史订单费用快照",
                 "source_status": "legacy_seed_snapshot",
-                "estimate_disclaimer": "固定演示订单；不代表税务、报关、物流或最终费用。",
+                "estimate_disclaimer": "历史费用记录仅供订单明细展示。",
             })
         return payload
 

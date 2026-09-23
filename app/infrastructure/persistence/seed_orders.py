@@ -52,7 +52,7 @@ def build_demo_orders() -> list[Order]:
 
     return [
         Order(
-            order_id="DEMO-CN-24001",
+            order_id="GBX-CN-24001",
             buyer_id="buyer-demo",
             shipping_address=_address("林静", "CN", "上海", "上海", "静安区南京西路 218 号", "200040", "13800001234"),
             lines=[
@@ -64,7 +64,7 @@ def build_demo_orders() -> list[Order]:
             confirmed_at=cn_created + timedelta(minutes=3),
         ),
         Order(
-            order_id="DEMO-US-24002",
+            order_id="GBX-US-24002",
             buyer_id="buyer-demo",
             shipping_address=_address("Maya Chen", "US", "California", "San Francisco", "88 Townsend Street", "94107", "+1-415-555-0186"),
             lines=[
@@ -75,7 +75,7 @@ def build_demo_orders() -> list[Order]:
             confirmed_at=us_created + timedelta(minutes=6),
         ),
         Order(
-            order_id="DEMO-EU-24003",
+            order_id="GBX-EU-24003",
             buyer_id="buyer-demo",
             shipping_address=_address("Noah Keller", "DE", "Berlin", "Berlin", "Friedrichstraße 120", "10117", "+49-30-555-0187"),
             lines=[
@@ -87,7 +87,7 @@ def build_demo_orders() -> list[Order]:
             confirmed_at=eu_created + timedelta(minutes=4),
         ),
         Order(
-            order_id="DEMO-JP-24004",
+            order_id="GBX-JP-24004",
             buyer_id="buyer-demo",
             shipping_address=_address("佐藤 葵", "JP", "東京都", "渋谷区", "神南 1-19-11", "150-0041", "+81-3-5550-0188"),
             lines=[
@@ -98,10 +98,10 @@ def build_demo_orders() -> list[Order]:
             created_at=jp_created,
             confirmed_at=jp_created + timedelta(minutes=5),
             cancelled_at=jp_created + timedelta(hours=2),
-            cancel_reason="模拟订单：买家调整旅行计划",
+            cancel_reason="买家调整旅行计划",
         ),
         Order(
-            order_id="DEMO-SG-24005",
+            order_id="GBX-SG-24005",
             buyer_id="buyer-demo",
             shipping_address=_address("Amira Tan", "SG", "Singapore", "Singapore", "21 Beach Road", "189677", "+65-6555-0189"),
             lines=[

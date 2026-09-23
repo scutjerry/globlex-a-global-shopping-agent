@@ -55,7 +55,7 @@ class InMemoryOrderRepository(OrderRepository):
         return sorted(orders, key=lambda order: (order.created_at, order.order_id), reverse=True)[:limit]
 
     async def next_order_id(self) -> str:
-        return f"SIM-{secrets.token_hex(6).upper()}"
+        return f"GBX-{secrets.token_hex(6).upper()}"
 
     async def find_idempotency(self, key_hash: str) -> Optional[tuple[str, str]]:
         return self._idempotency.get(key_hash)

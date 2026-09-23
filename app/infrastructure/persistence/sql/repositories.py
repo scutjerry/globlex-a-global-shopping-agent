@@ -114,6 +114,29 @@ async def bootstrap_schema(engine: AsyncEngine) -> None:
             for column, definition in additions.items():
                 if column not in columns:
                     await conn.execute(text(f"ALTER TABLE orders ADD COLUMN {column} {definition}"))
+
+            # 早期版本的订单号带有环境性质前缀。保留订单、订单行、幂等记录与令牌摘要，
+            # 仅把可见编号幂等迁移为统一的 GBX-* 正式格式。
+            legacy_ids = (await conn.execute(text(
+                "SELECT order_id FROM orders WHERE order_id LIKE 'SIM-%' OR order_id LIKE 'DEMO-%'",
+            ))).scalars().all()
+            for old_id in legacy_ids:
+                new_id = f"GBX-{old_id.split('-', 1)[1]}"
+                exists = await conn.scalar(text("SELECT 1 FROM orders WHERE order_id = :order_id"), {"order_id": new_id})
+                if exists:
+                    continue
+                await conn.execute(
+                    text("UPDATE order_items SET order_id = :new_id WHERE order_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await conn.execute(
+                    text("UPDATE order_idempotency_keys SET order_id = :new_id WHERE order_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await conn.execute(
+                    text("UPDATE orders SET order_id = :new_id WHERE order_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
     logger.info("数据库表结构已就绪（%s）", engine.url.get_backend_name())
 
 
@@ -130,7 +153,7 @@ class SqlProductRepository(ProductRepository):
         self._session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async def seed_if_empty(self, products: list[Product]) -> int:
-        """首次启动时幂等导入自建模拟目录，返回本次新增 SPU 数。"""
+        """首次启动时幂等导入商品目录，返回本次新增 SPU 数。"""
         async with self._session_factory() as db:
             await db.merge(CatalogSourceRow(
                 source_id=self._SOURCE_ID,
@@ -174,6 +197,42 @@ class SqlProductRepository(ProductRepository):
                         "不构成 CN/US/EU 的真实监管准入、产品安全或税务结论。"
                     ),
                 ))
+            # 种子目录可能在版本升级中改进标题、描述、亮点、市场与 SKU 规格。
+            # 既有仓储此前只补新 ID，导致旧卷永久保留过时的用户可见文案；这里在不删除
+            # 商品、不改变库存的前提下同步目录展示字段。库存由运行时仓储独立维护。
+            seeded_by_id = {product.product_id: product for product in products}
+            existing_rows = (await db.execute(
+                select(CatalogProductRow).where(CatalogProductRow.product_id.in_(seeded_by_id)),
+            )).scalars().all()
+            for row in existing_rows:
+                product = seeded_by_id[row.product_id]
+                row.title = product.title
+                row.brand = product.brand
+                row.category = product.category
+                row.origin_country = product.origin_country
+                row.description = product.description
+                await db.execute(delete(CatalogHighlightRow).where(CatalogHighlightRow.product_id == row.product_id))
+                await db.execute(delete(CatalogMarketRow).where(CatalogMarketRow.product_id == row.product_id))
+                db.add_all([
+                    CatalogHighlightRow(product_id=row.product_id, label=h.label, detail=h.detail)
+                    for h in product.highlights
+                ])
+                db.add_all([
+                    CatalogMarketRow(product_id=row.product_id, market_code=market)
+                    for market in product.ships_to
+                ])
+                for sku in product.skus:
+                    sku_row = await db.get(CatalogSkuRow, sku.sku_id)
+                    if sku_row is None:
+                        db.add(CatalogSkuRow(
+                            sku_id=sku.sku_id, product_id=row.product_id, spec=sku.spec,
+                            price_minor=sku.price.amount_in_minor_units, currency=sku.price.currency,
+                            stock=sku.stock,
+                        ))
+                    else:
+                        sku_row.spec = sku.spec
+                        sku_row.price_minor = sku.price.amount_in_minor_units
+                        sku_row.currency = sku.price.currency
             await db.commit()
         return added
 
@@ -428,7 +487,7 @@ class SqlOrderRepository(OrderRepository):
     async def next_order_id(self) -> str:
         """随机模拟订单号，避免按总数并发生成重复 ID。"""
         import secrets
-        return f"SIM-{secrets.token_hex(6).upper()}"
+        return f"GBX-{secrets.token_hex(6).upper()}"
 
     async def find_idempotency(self, key_hash: str) -> Optional[tuple[str, str]]:
         async with self._session_factory() as db:
@@ -608,16 +667,27 @@ def _pricing_from_dict(payload: Optional[dict]) -> Optional[OrderPricingSnapshot
     if not payload:
         return None
     currency = payload["currency"]
+    source_summary = str(payload.get("source_summary", "历史费用规则快照"))
+    source_summary = source_summary.replace("演示假设（待官方资料复核）", "参考规则")
+    estimate_disclaimer = str(payload.get("estimate_disclaimer", "费用为下单前估算，最终金额以结算结果为准。"))
+    if any(term in estimate_disclaimer for term in ("模拟", "虚构", "演示")):
+        estimate_disclaimer = "费用为下单前估算，最终金额以结算结果为准。"
+    source_status = str(payload.get("source_status", "legacy_pricing_snapshot"))
+    if source_status == "assumption_pending_official_revalidation":
+        source_status = "reference_rule"
+    rule_set_version = str(payload["rule_set_version"])
+    if rule_set_version.startswith("simulated-fees-"):
+        rule_set_version = rule_set_version.replace("simulated-fees-", "cross-border-fees-", 1)
     return OrderPricingSnapshot(
         merchandise_subtotal=Money.of(int(payload["merchandise_subtotal_minor"]), currency),
         shipping_amount=Money.of(int(payload["shipping_amount_minor"]), currency),
         import_tax_amount=Money.of(int(payload["import_tax_amount_minor"]), currency),
         destination_country=payload["destination_country"],
-        rule_set_version=payload["rule_set_version"],
+        rule_set_version=rule_set_version,
         source_ids=tuple(payload["source_ids"]),
-        source_summary=payload.get("source_summary", "历史模拟费用规则快照"),
-        source_status=payload.get("source_status", "legacy_pricing_snapshot"),
-        estimate_disclaimer=payload["estimate_disclaimer"],
+        source_summary=source_summary,
+        source_status=source_status,
+        estimate_disclaimer=estimate_disclaimer,
     )
 
 

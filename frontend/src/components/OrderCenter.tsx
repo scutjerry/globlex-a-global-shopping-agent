@@ -51,8 +51,7 @@ function formatTime(value: string): string {
 function pricingRows(order: OrderDetail | OrderQuote) {
   return [
     ["商品小计", order.merchandise_subtotal_major],
-    ["模拟运费", order.shipping_amount_major],
-    ["模拟进口税费", order.import_tax_amount_major],
+    ["跨境费用", order.shipping_amount_major + order.import_tax_amount_major],
   ] as const;
 }
 
@@ -90,7 +89,7 @@ export default function OrderCenter({ apiBase, controlTokens, setControlTokens, 
       setOrders(payload.items);
       setSelectedId((current) => current || payload.items[0]?.order_id || "");
     } catch (loadError) {
-      setError(`无法读取模拟订单：${String(loadError)}`);
+      setError(`无法读取订单：${String(loadError)}`);
     } finally {
       setLoading(false);
     }
@@ -152,7 +151,7 @@ export default function OrderCenter({ apiBase, controlTokens, setControlTokens, 
       setCreateIdempotencyKey(crypto.randomUUID());
     } catch (quoteError) {
       setQuote(null);
-      setError(`无法计算模拟到手价：${String(quoteError)}`);
+      setError(`无法计算到手价：${String(quoteError)}`);
     } finally {
       setSubmitting(false);
     }
@@ -161,11 +160,11 @@ export default function OrderCenter({ apiBase, controlTokens, setControlTokens, 
   const createOrder = async () => {
     const request = body();
     if (!request || !quote) {
-      setError("请先成功计算模拟到手价，再创建模拟订单。");
+      setError("请先成功计算到手价，再创建订单。");
       return;
     }
     if (!createIdempotencyKey) {
-      setError("报价已失效，请重新计算模拟到手价后再创建。");
+      setError("报价已失效，请重新计算到手价后再创建。");
       return;
     }
     setSubmitting(true);
@@ -191,7 +190,7 @@ export default function OrderCenter({ apiBase, controlTokens, setControlTokens, 
       setCreateIdempotencyKey("");
       await loadOrders();
     } catch (createError) {
-      setError(`无法创建模拟订单：${String(createError)}`);
+      setError(`无法创建订单：${String(createError)}`);
     } finally {
       setSubmitting(false);
     }
@@ -200,8 +199,8 @@ export default function OrderCenter({ apiBase, controlTokens, setControlTokens, 
   const deleteOrder = async () => {
     if (!detail) return;
     const token = controlTokens[detail.order_id];
-    if (!token) { setError("此页面未持有该模拟订单的删除控制令牌；不能删除。"); return; }
-    if (!window.confirm("删除后该模拟订单将从订单中心隐藏且不可恢复；这不会退款、发货或改变库存。确定删除吗？")) return;
+    if (!token) { setError("此页面未持有该订单的删除控制令牌；不能删除。"); return; }
+    if (!window.confirm("删除后该订单将从订单中心隐藏且不可恢复；这不会退款、发货或改变库存。确定删除吗？")) return;
     setSubmitting(true); setError("");
     try {
       const response = await fetch(`${apiBase}/commerce/orders/${encodeURIComponent(detail.order_id)}`, {
@@ -215,7 +214,7 @@ export default function OrderCenter({ apiBase, controlTokens, setControlTokens, 
       setDetail(null); setSelectedId("");
       await loadOrders();
     } catch (deleteError) {
-      setError(`无法删除模拟订单：${String(deleteError)}`);
+      setError(`无法删除订单：${String(deleteError)}`);
     } finally { setSubmitting(false); }
   };
 
@@ -223,7 +222,7 @@ export default function OrderCenter({ apiBase, controlTokens, setControlTokens, 
     if (!detail) return;
     const token = controlTokens[detail.order_id];
     if (!token) {
-      setError("此页面未持有该模拟订单的取消控制令牌；为保护演示订单，不能取消。\n");
+      setError("此页面未持有该订单的取消凭证，不能取消。\n");
       return;
     }
     setSubmitting(true);
@@ -239,28 +238,28 @@ export default function OrderCenter({ apiBase, controlTokens, setControlTokens, 
       // capability until deletion or page refresh; never persist or render it.
       await loadOrders();
     } catch (cancelError) {
-      setError(`无法取消模拟订单：${String(cancelError)}`);
+      setError(`无法取消订单：${String(cancelError)}`);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <section className="order-center" aria-label="受控模拟订单中心">
+    <section className="order-center" aria-label="订单中心">
       <div className="order-heading">
         <div>
-          <p className="eyebrow">SIMULATED ORDER LAB · NO REAL TRANSACTION</p>
-          <h2>受控模拟订单中心</h2>
-          <p>可为项目自建虚构商品创建、取消模拟订单；不会支付、发货、扣减库存或收集真实地址。价格是静态规则估算，绝非最终税费。</p>
+          <p className="eyebrow">ORDER MANAGEMENT</p>
+          <h2>订单中心</h2>
+          <p>查看报价、创建订单并管理订单状态。当前流程不会实际扣款、发货或变更库存，费用以结算页显示为准。</p>
         </div>
-        <span className="demo-stamp">受控演示</span>
+        <span className="demo-stamp">安全结算</span>
       </div>
 
-      <section className="order-creator" aria-label="创建模拟订单">
-        <h3>1. 计算模拟到手价</h3>
+      <section className="order-creator" aria-label="创建订单">
+        <h3>1. 计算到手价</h3>
         <p>订单项使用项目目录 SKU；不输入姓名、电话、邮编或地址。覆盖市场：US、EU、GB、JP、CN。</p>
         <label>订单项 JSON
-          <textarea value={itemsText} onChange={(event) => { setItemsText(event.target.value); invalidateQuote(); }} aria-label="模拟订单商品项" />
+          <textarea value={itemsText} onChange={(event) => { setItemsText(event.target.value); invalidateQuote(); }} aria-label="订单商品项" />
         </label>
         <div className="creator-controls">
           <label>目的市场
@@ -275,18 +274,18 @@ export default function OrderCenter({ apiBase, controlTokens, setControlTokens, 
         </div>
         {quote && (
           <div className="quote-panel">
-            <strong>模拟到手价：{formatAmount(quote.landed_total_major, quote.currency)}</strong>
+            <strong>到手价：{formatAmount(quote.landed_total_major, quote.currency)}</strong>
             {pricingRows(quote).map(([label, amount]) => <span key={label}>{label}：{formatAmount(amount, quote.currency)}</span>)}
             <small>规则 {quote.rule_set_version} · {quote.source_summary} · {quote.source_status}</small>
             <small>{quote.estimate_disclaimer}</small>
-            <button type="button" onClick={() => void createOrder()} disabled={submitting}>2. 明确创建模拟订单</button>
+            <button type="button" onClick={() => void createOrder()} disabled={submitting}>2. 明确创建订单</button>
           </div>
         )}
       </section>
 
-      {loading && <div className="order-feedback">正在载入模拟订单…</div>}
+      {loading && <div className="order-feedback">正在载入订单…</div>}
       {error && <div className="order-feedback error">{error}</div>}
-      {!loading && !error && !orders.length && <div className="order-feedback">暂时没有可展示的模拟订单。</div>}
+      {!loading && !error && !orders.length && <div className="order-feedback">暂时没有可展示的订单。</div>}
 
       {!loading && orders.length > 0 && (
         <div className="order-grid">
@@ -319,16 +318,16 @@ export default function OrderCenter({ apiBase, controlTokens, setControlTokens, 
               <div className="pricing-breakdown">
                 {pricingRows(detail).map(([label, amount]) => <div key={label}><span>{label}</span><strong>{formatAmount(amount, detail.currency)}</strong></div>)}
               </div>
-              <div className="order-total"><span>模拟到手价合计</span><strong>{formatAmount(detail.total_amount_major, detail.currency)}</strong></div>
+              <div className="order-total"><span>到手价合计</span><strong>{formatAmount(detail.total_amount_major, detail.currency)}</strong></div>
               <p className="rule-note">规则 {detail.rule_set_version} · {detail.source_summary} · {detail.source_status}<br />{detail.estimate_disclaimer}</p>
-              {detail.order_kind === "USER_SIMULATION" && detail.status === "CONFIRMED" && (
+              {detail.manageable && detail.status === "CONFIRMED" && (
                 <button className="cancel-order" type="button" onClick={() => void cancelOrder()} disabled={submitting || !controlTokens[detail.order_id]}>
-                  {controlTokens[detail.order_id] ? "取消此模拟订单" : "仅创建页面可取消"}
+                  {controlTokens[detail.order_id] ? "取消此订单" : "仅创建页面可取消"}
                 </button>
               )}
-              {detail.order_kind === "USER_SIMULATION" && (detail.status === "CONFIRMED" || detail.status === "CANCELLED") && (
+              {detail.manageable && (detail.status === "CONFIRMED" || detail.status === "CANCELLED") && (
                 <button className="delete-order" type="button" onClick={() => void deleteOrder()} disabled={submitting || !controlTokens[detail.order_id]}>
-                  {controlTokens[detail.order_id] ? "删除此模拟订单" : "仅创建页面可删除"}
+                  {controlTokens[detail.order_id] ? "删除此订单" : "仅创建页面可删除"}
                 </button>
               )}
               <p className="privacy-note">不展示或收集买家身份、电话、邮编、详细收货地址或取消原因；取消和删除不会退款、发货或改变库存。</p>

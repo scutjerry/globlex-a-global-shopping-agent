@@ -141,7 +141,7 @@ export default function App() {
         </div>
         <nav className="view-tabs" aria-label="工作区切换">
           <button className={activeView === "chat" ? "active" : ""} onClick={() => setActiveView("chat")} type="button">Agent 对话</button>
-          <button className={activeView === "orders" ? "active" : ""} onClick={() => setActiveView("orders")} type="button">模拟订单</button>
+          <button className={activeView === "orders" ? "active" : ""} onClick={() => setActiveView("orders")} type="button">订单中心</button>
         </nav>
       </header>
 
@@ -168,7 +168,7 @@ export default function App() {
 
           {createdFromChat && (
             <div className="creation-notice" role="status">
-              <strong>已创建模拟订单 {createdFromChat.order_id}</strong>
+              <strong>订单已创建 {createdFromChat.order_id}</strong>
               <span>{createdFromChat.status} · 目的市场 {createdFromChat.destination_country} · {createdFromChat.total_amount_major} {createdFromChat.currency} · {createdFromChat.item_count} 件</span>
               <small>此订单不会支付、发货或扣减库存。控制令牌只保存在本次会话内存中，取消或删除都需在订单中心完成。</small>
               <div className="creation-actions">

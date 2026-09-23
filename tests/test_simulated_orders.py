@@ -42,8 +42,8 @@ async def test_quote_uses_three_part_landed_price_and_versions_rules(quote):
     assert view["landed_total_major"] == pytest.approx(
         view["merchandise_subtotal_major"] + view["shipping_amount_major"] + view["import_tax_amount_major"],
     )
-    assert view["rule_set_version"].startswith("simulated-fees-")
-    assert "模拟估算" in view["estimate_disclaimer"]
+    assert view["rule_set_version"].startswith("cross-border-fees-")
+    assert "下单前估算" in view["estimate_disclaimer"]
     assert view["source_status"] == "official_verified"
 
 
@@ -90,7 +90,7 @@ async def test_create_and_cancel_never_change_catalog_stock(product_repo, order_
     create = CreateSimulatedOrderUseCase(quote, order_repo)
     created = await create.execute("buyer-private", [OrderItemInput("P1001", "P1001-S1", 2)], "US", "USD")
     assert created.order.status.value == "CONFIRMED"
-    assert created.order.order_id.startswith("SIM-")
+    assert created.order.order_id.startswith("GBX-")
     assert (await product_repo.find_by_id("P1001")).find_sku("P1001-S1").stock == before
 
     cancelled = await CancelSimulatedOrderUseCase(order_repo).execute(created.order.order_id, created.control_token)
@@ -107,8 +107,8 @@ async def test_order_freezes_quote_and_hides_private_fields(product_repo, order_
     assert view["total_amount_major"] == pytest.approx(
         view["merchandise_subtotal_major"] + view["shipping_amount_major"] + view["import_tax_amount_major"],
     )
-    assert view["source_status"] == "assumption_pending_official_revalidation"
-    assert "待官方资料复核" in view["source_summary"]
+    assert view["source_status"] == "reference_rule"
+    assert "参考规则" in view["source_summary"]
     for forbidden in (
         "buyer_id", "shipping_address", "recipient_name", "phone", "postal_code", "address_line",
         "cancel_reason", "cancel_reason_code", "control_token_hash", "order_control_token",

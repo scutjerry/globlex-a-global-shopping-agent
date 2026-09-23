@@ -77,16 +77,16 @@ class QuoteSimulatedOrderUseCase:
         currency: str,
     ) -> SimulatedOrderQuote:
         if not items:
-            raise ValueError("模拟订单 items 不能为空")
+            raise ValueError("订单 items 不能为空")
         if destination_country not in self._fees.supported_destinations():
             self._fees.rule_for(destination_country)  # raises a stable, explanatory validation error
         if len({(item.product_id, item.sku_id) for item in items}) != len(items):
-            raise ValueError("模拟订单不允许重复商品项，请合并数量后重试")
+            raise ValueError("订单不允许重复商品项，请合并数量后重试")
         total_quantity = 0
         lines: list[OrderLine] = []
         for item in items:
             if not item.product_id or not item.sku_id:
-                raise ValueError("模拟订单商品与 SKU 不能为空")
+                raise ValueError("订单商品与 SKU 不能为空")
             if not isinstance(item.quantity, int) or isinstance(item.quantity, bool) or not 1 <= item.quantity <= 10:
                 raise ValueError("每个模拟订单商品数量必须在 1 到 10 之间")
             product = await self._require_product(item.product_id)
@@ -106,7 +106,7 @@ class QuoteSimulatedOrderUseCase:
             ))
             total_quantity += item.quantity
         if total_quantity > 10:
-            raise ValueError("模拟订单商品总数量必须在 1 到 10 之间")
+            raise ValueError("订单商品总数量必须在 1 到 10 之间")
         subtotal = lines[0].subtotal()
         for line in lines[1:]:
             subtotal = subtotal.add(line.subtotal())
@@ -139,7 +139,7 @@ class CreateSimulatedOrderUseCase:
         currency: str,
     ) -> CreatedSimulatedOrder:
         if not buyer_id:
-            raise ValueError("模拟订单 buyer_id 不能为空")
+            raise ValueError("订单 buyer_id 不能为空")
         quote = await self._quote_order.execute(items, destination_country, currency)
         control_token = secrets.token_urlsafe(32)
         pricing = OrderPricingSnapshot(
@@ -174,9 +174,9 @@ class CreateSimulatedOrderUseCase:
         request_hash: str,
     ) -> CreatedSimulatedOrder:
         if not request_key_hash or not request_hash:
-            raise ValueError("模拟订单幂等键不能为空")
+            raise ValueError("订单幂等键不能为空")
         if not buyer_id:
-            raise ValueError("模拟订单 buyer_id 不能为空")
+            raise ValueError("订单 buyer_id 不能为空")
         # Fast retry path: return the originally frozen order before re-quoting against mutable catalog/rules.
         existing = await self._order_repo.find_idempotency(request_key_hash)
         if existing is not None:
@@ -186,7 +186,7 @@ class CreateSimulatedOrderUseCase:
             previous = await self._order_repo.find_by_id(existing_order_id)
             if previous is None:
                 # Keep the idempotency record rather than silently recreating a logically deleted order.
-                raise RuntimeError("该模拟订单已删除，不能通过重试恢复")
+                raise RuntimeError("该订单已删除，不能通过重试恢复")
             return CreatedSimulatedOrder(order=previous, control_token="", reused=True)
         quote = await self._quote_order.execute(items, destination_country, currency)
         control_token = secrets.token_urlsafe(32)
@@ -224,19 +224,19 @@ class DeleteSimulatedOrderUseCase:
     async def execute(self, order_id: str, control_token: str) -> None:
         order = await self._order_repo.find_by_id(order_id)
         if order is None:
-            raise LookupError("模拟订单不存在")
+            raise LookupError("订单不存在")
         if not order.is_deletable:
-            raise RuntimeError("该模拟订单当前不可删除")
+            raise RuntimeError("该订单当前不可删除")
         token_hash = _token_hash(control_token) if control_token else ""
         if not token_hash or not order.control_token_hash or not hmac.compare_digest(token_hash, order.control_token_hash):
             # Do not disclose whether this order belongs to an actor or whether a supplied token was close.
-            raise PermissionError("无法执行此模拟订单删除")
+            raise PermissionError("无法执行此订单删除")
         if not await self._order_repo.delete_if_allowed(order_id, token_hash):
             # Another delete/cancel may have won after the initial check; never resurrect on a retry.
             refreshed = await self._order_repo.find_by_id(order_id)
             if refreshed is None:
-                raise LookupError("模拟订单不存在")
-            raise RuntimeError("该模拟订单当前不可删除")
+                raise LookupError("订单不存在")
+            raise RuntimeError("该订单当前不可删除")
 
 
 class QueryOrderUseCase:
@@ -278,19 +278,19 @@ class CancelSimulatedOrderUseCase:
         if order is None:
             raise LookupError(f"订单不存在：{order_id}")
         if not order.is_cancellable:
-            raise RuntimeError("该模拟订单当前不可取消")
+            raise RuntimeError("该订单当前不可取消")
         token_hash = _token_hash(control_token) if control_token else ""
         if not token_hash or not order.control_token_hash or not hmac.compare_digest(token_hash, order.control_token_hash):
             # Intentional generic message: do not reveal ownership or token validity detail.
-            raise PermissionError("无法执行此模拟订单取消")
+            raise PermissionError("无法执行此订单取消")
         if not await self._order_repo.cancel_if_confirmed(order_id, token_hash):
             # A concurrent cancellation may have won after the initial read.
             refreshed = await self._order_repo.find_by_id(order_id)
             if refreshed is not None and refreshed.status.value == "CANCELLED":
-                raise RuntimeError("该模拟订单当前不可取消")
-            raise PermissionError("无法执行此模拟订单取消")
+                raise RuntimeError("该订单当前不可取消")
+            raise PermissionError("无法执行此订单取消")
         cancelled = await self._order_repo.find_by_id(order_id)
         if cancelled is None:
-            raise RuntimeError("模拟订单取消后读取失败")
+            raise RuntimeError("订单取消后读取失败")
         return cancelled.public_view()
 

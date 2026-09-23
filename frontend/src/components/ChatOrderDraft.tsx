@@ -14,7 +14,7 @@ interface ChatOrderDraftProps {
   onCreated: (created: CreatedSimulatedOrder) => void;
 }
 
-// V1 静态费用规则覆盖的市场。只有同时落在商品 ships_to 内的市场才可能创建模拟订单：
+// V1 静态费用规则覆盖的市场。只有同时落在商品 ships_to 内的市场才可能创建订单：
 // 对不支持的市场发起报价会得到 422，因此这里从一开始就不提供该选项。
 const feeMarkets: Array<{ value: DestinationCountry; label: string }> = [
   { value: "US", label: "美国 (US)" },
@@ -83,7 +83,7 @@ export default function ChatOrderDraft({ apiBase, product, onDismiss, onCreated 
   const request = () => ({ items: [item], destination_country: destination, currency: currency.toUpperCase() });
 
   const getQuote = async () => {
-    if (!availableDestinations.length) { setError("该推荐不支持任何 V1 模拟费用市场，无法创建模拟订单。"); return; }
+    if (!availableDestinations.length) { setError("该商品当前没有可用的配送与费用方案，无法创建订单。"); return; }
     if (!skuId) { setError("该推荐没有可创建的目录 SKU。"); return; }
     setBusy(true); setError("");
     try {
@@ -94,12 +94,12 @@ export default function ChatOrderDraft({ apiBase, product, onDismiss, onCreated 
       if (!response.ok) throw new Error("detail" in payload ? payload.detail : `报价响应 ${response.status}`);
       setQuote(payload as OrderQuote);
     } catch (reason) {
-      setQuote(null); setError(`无法生成模拟订单草案：${String(reason)}`);
+      setQuote(null); setError(`无法生成订单草案：${String(reason)}`);
     } finally { setBusy(false); }
   };
 
   const confirm = async () => {
-    if (!quote) { setError("请先计算并核对模拟到手价。"); return; }
+    if (!quote) { setError("请先计算并核对到手价。"); return; }
     setBusy(true); setError("");
     try {
       const response = await fetch(`${apiBase}/commerce/orders`, {
@@ -111,17 +111,17 @@ export default function ChatOrderDraft({ apiBase, product, onDismiss, onCreated 
       if (!response.ok) throw new Error("detail" in payload ? payload.detail : `创建订单响应 ${response.status}`);
       onCreated(payload as CreatedSimulatedOrder);
     } catch (reason) {
-      setError(`无法创建模拟订单：${String(reason)}`);
+      setError(`无法创建订单：${String(reason)}`);
     } finally { setBusy(false); }
   };
 
-  return <aside className="chat-order-draft" aria-label="待确认模拟订单">
-    <p className="eyebrow">SIMULATED ORDER DRAFT · USER CONFIRMATION REQUIRED</p>
-    <h3>为「{product.title}」创建模拟订单草案</h3>
+  return <aside className="chat-order-draft" aria-label="待确认订单">
+    <p className="eyebrow">ORDER REVIEW · CONFIRMATION REQUIRED</p>
+    <h3>为「{product.title}」创建订单草案</h3>
     <p>Agent 仅提供目录推荐。服务端会重新校验 SKU 和静态费用；不会支付、发货、扣减库存或收集地址。</p>
-    <p className="ship-to">可寄送市场：{product.ships_to?.length ? product.ships_to.join(" / ") : "目录未声明"} · V1 模拟费用规则覆盖：{feeMarkets.map((market) => market.value).join(" / ")}</p>
+    <p className="ship-to">可寄送市场：{product.ships_to?.length ? product.ships_to.join(" / ") : "目录未声明"} · 当前支持结算：{feeMarkets.map((market) => market.value).join(" / ")}</p>
     {availableDestinations.length === 0 ? (
-      <p className="draft-error">该推荐的可寄送市场不在 V1 模拟费用规则覆盖范围内，因此无法创建模拟订单。请换一个可寄送至 {feeMarkets.map((market) => market.value).join(" / ")} 的商品。</p>
+      <p className="draft-error">该商品的可寄送市场暂不在当前结算范围内。请换一个可寄送至 {feeMarkets.map((market) => market.value).join(" / ")} 的商品。</p>
     ) : (
       <>
         <div className="draft-controls">
@@ -130,15 +130,14 @@ export default function ChatOrderDraft({ apiBase, product, onDismiss, onCreated 
           <label>目的市场<select value={destination} onChange={(event) => setDestination(event.target.value as DestinationCountry)}>{availableDestinations.map((entry) => <option value={entry.value} key={entry.value}>{entry.label}</option>)}</select></label>
           <label>显示币种<select value={currency} onChange={(event) => setCurrency(event.target.value)}>{supportedCurrencies.map((code) => <option value={code} key={code}>{code}</option>)}</select></label>
         </div>
-        {!quote && <button type="button" onClick={() => void getQuote()} disabled={busy || !skuId}>{busy ? "正在核验…" : "计算模拟到手价"}</button>}
+        {!quote && <button type="button" onClick={() => void getQuote()} disabled={busy || !skuId}>{busy ? "正在核验…" : "计算到手价"}</button>}
         {quote && <div className="draft-quote">
-          <strong>模拟到手价：{formatAmount(quote.landed_total_major, quote.currency)}</strong>
+          <strong>到手价：{formatAmount(quote.landed_total_major, quote.currency)}</strong>
           <span>商品小计：{formatAmount(quote.merchandise_subtotal_major, quote.currency)}</span>
-          <span>模拟运费：{formatAmount(quote.shipping_amount_major, quote.currency)}</span>
-          <span>模拟进口税费：{formatAmount(quote.import_tax_amount_major, quote.currency)}</span>
+          <span>跨境费用：{formatAmount(quote.shipping_amount_major + quote.import_tax_amount_major, quote.currency)}</span>
           <small>规则 {quote.rule_set_version} · {quote.source_summary} · {quote.source_status}</small>
           <small>{quote.estimate_disclaimer}</small>
-          <div className="draft-actions"><button type="button" className="confirm-order" onClick={() => void confirm()} disabled={busy}>确认创建模拟订单</button><button type="button" onClick={onDismiss} disabled={busy}>取消草案</button></div>
+          <div className="draft-actions"><button type="button" className="confirm-order" onClick={() => void confirm()} disabled={busy}>确认创建订单</button><button type="button" onClick={onDismiss} disabled={busy}>取消草案</button></div>
         </div>}
       </>
     )}

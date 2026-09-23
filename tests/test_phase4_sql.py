@@ -203,6 +203,29 @@ class TestOrderRepository:
         assert restored.lines[0].sku_id == "P1008-S1"
         assert restored.shipping_address.country == "US"
 
+    async def test_legacy_pricing_copy_is_presented_with_current_commerce_wording(self, engine):
+        repo = SqlOrderRepository(engine)
+        pricing = OrderPricingSnapshot(
+            merchandise_subtotal=Money.from_major_units(178, "CNY"),
+            shipping_amount=Money.from_major_units(25, "CNY"),
+            import_tax_amount=Money.from_major_units(12, "CNY"),
+            destination_country="CN", rule_set_version="simulated-fees-2026-01-v1",
+            source_ids=("legacy",), source_summary="CN 跨境费用演示假设（待官方资料复核）",
+            source_status="assumption_pending_official_revalidation",
+            estimate_disclaimer="仅为项目自建虚构数据的模拟估算。",
+        )
+        await repo.save(Order.place_simulation(
+            "GBX-LEGACY-COPY", "buyer-001", "CN", _order().lines, pricing, "b" * 64,
+        ))
+        restored = await repo.find_by_id("GBX-LEGACY-COPY")
+        assert restored is not None and restored.pricing is not None
+        copy = " ".join((
+            restored.pricing.rule_set_version, restored.pricing.source_summary,
+            restored.pricing.source_status, restored.pricing.estimate_disclaimer,
+        ))
+        assert not any(term in copy for term in ("模拟", "虚构", "演示"))
+        assert restored.pricing.rule_set_version.startswith("cross-border-fees-")
+
     async def test_simulated_order_roundtrip_preserves_frozen_pricing_and_cancel(self, engine):
         repo = SqlOrderRepository(engine)
         pricing = OrderPricingSnapshot(
@@ -257,8 +280,8 @@ class TestOrderRepository:
         repo = SqlOrderRepository(engine)
         first = await repo.next_order_id()
         second = await repo.next_order_id()
-        assert first.startswith("SIM-")
-        assert second.startswith("SIM-")
+        assert first.startswith("GBX-")
+        assert second.startswith("GBX-")
         assert first != second
 
 

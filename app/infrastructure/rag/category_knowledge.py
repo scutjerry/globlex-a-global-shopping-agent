@@ -64,8 +64,9 @@ def build_category_knowledge_base(settings: Settings) -> KnowledgeBase:
 async def bootstrap_category_knowledge(
     knowledge_base: KnowledgeBase,
     knowledge_dir: Optional[Path] = None,
+    refresh_existing: bool = False,
 ) -> int:
-    """把 knowledge/*.md 灌入知识库（幂等），返回入库文档数；失败仅告警返回 0。"""
+    """把 knowledge/*.md 灌入知识库，必要时刷新同名文档；失败仅告警返回 0。"""
     directory = knowledge_dir or KNOWLEDGE_DIR
     try:
         await knowledge_base.ensure_collection()
@@ -75,7 +76,9 @@ async def bootstrap_category_knowledge(
         for md_file in sorted(directory.glob("*.md")):
             document_id = md_file.stem
             if document_id in existing:
-                continue
+                if not refresh_existing:
+                    continue
+                await knowledge_base.delete_document(document_id)
             sections = await parser.parse(str(md_file), filename=md_file.name)
             chunks = await chunker.chunk(sections)
             await knowledge_base.insert_document(
@@ -84,10 +87,11 @@ async def bootstrap_category_knowledge(
                 document_metadata={"source": md_file.name},
             )
             inserted += 1
+        total = len(await knowledge_base.list_documents())
         logger.info(
-            "品类知识库就绪：新增 %d 篇，累计 %d 篇",
+            "品类知识库就绪：写入 %d 篇，累计 %d 篇",
             inserted,
-            len(existing) + inserted,
+            total,
         )
         return inserted
     except Exception as err:  # noqa: BLE001 —— 知识库不可用不阻塞启动

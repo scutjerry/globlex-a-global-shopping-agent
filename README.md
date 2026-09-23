@@ -1,94 +1,98 @@
-# Globex — 跨境商品检索与模拟下单 Agent
+# Globex — 跨境购物智能体
 
-用一句话说清需求，Agent 负责理解、检索、比价与推荐；用户确认后，可以创建一笔**受控模拟订单**。
+用一句话说清目的市场、预算和偏好，Globex 会理解购物意图、检索商品、比较规格、计算到手价，并把合适的选择整理成可直接操作的商品卡。用户核对费用后，可在页面中创建和管理订单。
 
-Globex 是一个可 `docker compose` 一键部署的跨境电商检索演示系统：基于 AgentScope 2.x 构建对话式
-购物 Agent，配合向量召回、品类洞察知识库与版本化静态费用规则，完成从「自然语言找货」到
-「模拟到手价 → 确认下单」的完整链路。后端 DDD 分层（FastAPI + SQLite + Redis + Qdrant），
-前端 React + Vite 由 Nginx 托管，浏览器只需访问**一个入口**。
+Globex 基于 AgentScope 2.x、FastAPI、SQLite、Redis、Qdrant、React 与 Vite 构建，可通过 Docker Compose 一键部署。它覆盖从自然语言找货、品类知识辅助决策、结构化商品推荐，到报价确认和订单管理的完整购物链路。
 
 > **作者**：**jerry** ｜ 仓库：<https://github.com/scutjerry/gloshopping-agent>
-
-> **数据与交易边界**：商品、品牌、价格、库存、订单、费用规则和历史种子地址**全部是项目自建的虚构演示数据**，
-> 与任何真实商家、商品或监管认证无关。本版本支持检索、比较、模拟到手价，以及**受控模拟订单的创建、取消与逻辑删除**。
-> 不支持真实支付、退款、履约、物流、库存预占/变更或真实售后；新模拟订单不收集真实收件地址。
-> 聊天 Agent **不具备**创建/取消/删除订单的能力，下单必须由用户在草案卡上明确确认。
+>
+> **当前服务范围**：页面支持商品检索、规格比较、跨币种费用估算、订单创建、取消与逻辑删除。当前版本未接入支付机构、承运商和外部履约系统，因此不会实际扣款、退款、发货或变更库存；费用以结算页显示为准。订单写操作必须由用户在页面中明确确认，Agent 不会代替用户提交。
 
 ---
 
-## 功能特性
+## 产品体验
 
-### 1. 对话式商品检索（Agent）
+### 1. 用自然语言表达购物需求
 
-- **自然语言意图理解**：SearchAgent 把买家的口语 query 改写为标准化检索规格
-  （目的市场、价格上限、品类意图），而不是把原句直接丢给向量库。
-- **二阶段召回 + 显式降级链**：`embedding_only` → `embedding_rerank` → `keyword_2gram`。
-  每一步降级都会如实写入响应的 `recall_strategy` 字段，**不会把降级结果伪装成语义召回**。
-- **硬过滤可观测**：被目的市场（`ship_to`）或价格上限挡掉的候选，以 `filtered_out` 摘要回传，
-  便于定位「为什么这件商品没出现」。
-- **推荐卡**：展示商品、SKU、价格与**可寄送市场**，并可直接从卡片发起下单草案。
-- **多国虚构目录**：100+ 条结构化 SPU、4 大品类、100+ 虚构品牌、15 种显示币种、20+ 目的市场。
+输入目的市场、预算、使用场景和偏好即可开始。Agent 会提取约束、检索目录、调用品类知识并生成推荐理由；事件时间线会实时展示检索和工具执行过程。
 
-### 2. 品类洞察知识库（RAG）
+### 2. 从推荐结果直接进入购买流程
 
-5 篇品类的选购知识沉淀为向量知识库，Agent 通过 `category_insight` 工具按需检索，
-让推荐理由基于知识而非模型臆测（`knowledge/*.md` → Qdrant 1024 维索引）。
+商品卡集中展示价格、到手价、运费与进口税费、商品亮点、规格库存和可寄送市场。每个结果都可以从“立即购买”进入订单确认。
 
-### 3. 模拟到手价（报价）
+<p align="center">
+  <img src="docs/screenshots/globex-product-card.png" alt="Globex 商品推荐卡" width="360" />
+</p>
 
-- `POST /commerce/order-quotes`：**无副作用**报价，拆分商品小计、模拟运费、模拟进口税费，
-  并返回规则版本与免责声明。
+### 3. 核对到手价后确认订单
+
+确认卡会重新校验 SKU、目的市场和费用规则，并将商品小计、运费、进口税费与到手价分开展示。只有用户点击确认后才会创建订单。
+
+![Globex 到手价与订单确认](docs/screenshots/globex-order-review.png)
+
+### 4. 在订单中心查看和管理订单
+
+订单中心提供报价入口、订单列表、状态、商品明细和费用拆分。用户可以管理当前页面创建的订单，公开响应不会返回买家身份、电话、邮编、详细地址或管理凭证。
+
+![Globex 订单中心](docs/screenshots/globex-order-center-cropped.png)
+
+---
+
+## 核心能力
+
+### 对话式商品检索
+
+- **自然语言意图理解**：SearchAgent 将口语需求整理为目的市场、价格上限、品类意图和使用场景等检索规格。
+- **二阶段召回与降级链**：`embedding_only` → `embedding_rerank` → `keyword_2gram`；响应中的 `recall_strategy` 如实反映实际路径。
+- **硬过滤可观测**：被 `ship_to` 或价格上限排除的候选通过 `filtered_out` 返回摘要，便于解释结果。
+- **结构化推荐卡**：展示商品、SKU、规格、价格、库存、到手价和可寄送市场，并衔接订单确认。
+- **充足的检索纵深**：420 个 SPU、801 个 SKU、10 个品类；256 个商品提供多个 SKU，适合检验召回、过滤和排序差异。
+
+### 品类知识增强
+
+10 篇选购知识文档构成独立的 Qdrant 向量知识库。Agent 通过 `category_insight` 按需检索旅行装备、数码配件、户外运动、家居生活、健康护理、母婴亲子、宠物出行、办公文具、服饰配件和运动健身等主题，让推荐理由有可追溯的知识依据。
+
+### 到手价与跨市场规则
+
+- `POST /commerce/order-quotes` 提供无副作用报价，分别返回商品小计、运费、进口税费和到手价。
 - V1 版本化静态规则覆盖 `US`、`EU`、`GB`、`JP`、`CN` 五个市场。
-- 目的地会与商品的 `ships_to` 求交集：**不寄送该市场的商品不会给出报价**，且报错明确指出原因。
+- 报价会校验商品的 `ships_to`；不支持目标市场的商品不会进入确认流程。
+- 金额在创建订单时冻结，后续详情保持同一费用快照。
 
-### 4. 受控模拟订单
+### 订单管理与隐私
 
-- **创建**：聊天推荐 → 草案卡核价 → 用户点击确认 → 携带一次性控制令牌创建。必须带 `Idempotency-Key`，
-  重复提交不会产生第二笔订单。
-- **取消**：仅限运行时创建且处于 `CONFIRMED` 的订单。
-- **逻辑删除**：订单行与幂等审计**保留**，仅置为 `DELETED` 并从公开列表隐藏（详情 404），
-  重放幂等键也不会让已删订单复活。删除后前端丢弃控制令牌。
-- **固定演示订单**：`DEMO-*` 种子订单可读，但**不可取消、不可删除**。
-- **隐私最小化**：公开响应只返回订单号、状态、费用拆分、规则版本、时间、订单行与目的国家；
-  绝不返回买家 ID、收件人姓名、电话、详细地址、控制令牌或其摘要、取消原因。
-- **令牌安全**：控制令牌为一次性随机值，库内**仅存 SHA-256 摘要**，明文只驻留前端内存
-  （不写入 localStorage / sessionStorage / URL / 日志）。
+- **创建**：商品卡 → 订单确认 → 用户点击确认；`Idempotency-Key` 防止重复提交产生多笔订单。
+- **取消**：仅允许管理当前页面创建且状态符合条件的订单。
+- **逻辑删除**：保留订单行和幂等审计，将订单从公开列表隐藏，重复请求不会让已删除订单恢复。
+- **最小化公开信息**：仅返回订单号、状态、金额、规则版本、时间、商品行和目的市场。
+- **管理凭证保护**：凭证为一次性随机值，数据库仅保存 SHA-256 摘要；明文只驻留前端内存，不进入 localStorage、sessionStorage、URL 或日志。
+- **Agent 权限边界**：Agent 只负责检索、比较和脱敏查询，不注册创建、取消或删除订单的工具。
 
-### 5. 长期偏好记忆
+### 长期偏好记忆
 
-Agent 可通过 `remember_preference` / `forget_preference` 工具维护跨会话的稳定显式偏好，
-并按相关性筛选后注入上下文（偏好与子 Agent 注入共用同一实例，口径不会两头漂移）。
+Agent 可以通过 `remember_preference` 与 `forget_preference` 维护跨会话的稳定偏好，并按当前问题的相关性筛选后注入上下文。
 
-### 6. Agent 护栏与稳定性
+### 稳定性与可观测性
 
-- **权限层**：不注册任何订单写工具，仅对计划、调度与偏好工具追加精确 `allow` 规则，
-  不使用 BYPASS 全局放行。
-- **序列校验 / 循环检测 / 漂移检测**：按会话累积状态，检测工具调用顺序违规、重复打转与目标漂移。
-- **上下文策略**：工具结果字符上限与上下文压缩，防止商品卡 JSON 挤爆上下文；摘要数字必须来自工具返回。
-- **网关配额闸门**：全进程唯一的并发/间隔限流，三个 Agent 工厂共用（各限一份等于没限）。
-- **熔断与超时**：业务工具带超时与熔断保护，熔断状态可选经 Redis 跨实例共享。
-- **语义缓存**：缓存 key 混入**模型名 + 提示词文件指纹**——改提示词或换模型后旧回复自动失效。
-
-### 7. 工程与可观测
-
-- **按需降级**：没 Redis 就退化为单进程直跑；`DATABASE_URL=file` 则用 JSON 文件存储；
-  未配 reranker / Tavily / OTLP 就分别关闭对应能力。**缺配置不会导致启动失败。**
-- **事件流**：WebSocket 逐条推送模型输出、工具调用、计划与最终回答，前端渲染为可视化时间线。
-- **跨进程事件背板**：API 与 worker 是两个进程，若不接背板前端收不到 worker 产生的事件（已处理）。
-- **可观测**：可选 OpenTelemetry 追踪；评测与压测脚本见 `eval/`、`scripts/`。
+- 工具调用序列校验、循环检测和目标漂移检测按会话累积状态。
+- 工具结果字符上限与上下文压缩避免大批商品 JSON 挤占模型上下文。
+- 全进程共享模型并发和调用间隔限制，并为业务工具提供超时与熔断保护。
+- 语义缓存键包含模型名和提示词文件指纹，更新模型或提示词后旧回复自动失效。
+- WebSocket 实时推送模型输出、工具调用、计划和最终回答，前端将其呈现为事件时间线。
+- Redis 为 API 与 worker 提供队列、缓存和跨进程事件背板；关键依赖不可用时按配置进入受控降级。
 
 ---
 
-## 运行时结构
+## 系统架构
 
 ```text
 浏览器 http://localhost:8080
         │
         ▼
-Nginx + React 静态站点（frontend）
+Nginx + React（frontend）
   ├── /                 React SPA
-  ├── /api/*            → FastAPI app:8000（去除 /api 前缀）
-  └── /ws/*             → FastAPI WebSocket（去除 /ws 前缀）
+  ├── /api/*            → FastAPI app:8000
+  └── /ws/*             → FastAPI WebSocket
         │
         ├── app          FastAPI + Agent + SQLite
         ├── worker       Redis Stream 意图消费
@@ -100,60 +104,79 @@ Nginx + React 静态站点（frontend）
 
 ```text
 app/
-├── domain/              Product / Sku / Money / Order / 检索规格 / 仓储端口
+├── domain/              Product / SKU / Money / Order / 检索规格 / 仓储端口
 ├── application/
 │   ├── agents/          主 Agent、检索与交易子 Agent、编排器、权限与上下文策略
-│   ├── tools/           检索、品类洞察、订单查询、Web 搜索、偏好、子 Agent 派发
-│   ├── harness/         序列校验、循环检测、漂移检测、工具契约断言
-│   ├── memory/          偏好选取
-│   ├── prompts/         提示词（globex.yml）
-│   └── usecases/        检索用例与受控模拟订单用例
-├── infrastructure/      SQLite / Redis / Qdrant / 模型 / 缓存 / 韧性 / 种子数据
+│   ├── tools/           商品检索、品类洞察、订单查询、Web 搜索、偏好与子 Agent 派发
+│   ├── harness/         序列校验、循环检测、漂移检测与工具契约断言
+│   ├── memory/          偏好选择
+│   ├── prompts/         Agent 提示词
+│   └── usecases/        商品检索、报价与订单用例
+├── infrastructure/      SQLite / Redis / Qdrant / 模型 / 缓存 / 韧性 / 目录数据
 ├── presentation/        FastAPI 路由、WebSocket 与脱敏 DTO
-├── composition.py       装配根（API 与 worker 共用，避免行为漂移）
+├── composition.py       API 与 worker 共用的装配根
 └── worker.py            队列消费者入口
-frontend/                React + Vite 源码、Nginx 生产镜像
-knowledge/               品类洞察 Markdown（5 篇）
-docs/                    设计契约、边界说明与故障复盘
-eval/                    评测用例与标注集
+frontend/                React + Vite 源码和 Nginx 生产镜像
+knowledge/               品类选购知识文档
 scripts/                 本地运行、评测、压测与验证脚本
+tests/                   领域、应用、基础设施和 HTTP 契约测试
 docker/docker-compose.yaml
 ```
 
 ---
 
-## 快速开始（Docker Compose）
+## 快速开始
 
-把配置写进项目根目录的 `.env`（可从 `.env.example` 复制）：
+### 1. 准备配置
 
 ```bash
 cp .env.example .env
-# 编辑 .env：至少填好 LLM_BASE_URL 与 LLM_API_KEY，
-# 并把 LLM_MODEL 设成你的网关实际支持的型号
-
-docker compose -f docker/docker-compose.yaml up -d --build
+# 编辑 .env，至少配置：
+# LLM_BASE_URL
+# LLM_API_KEY
+# LLM_MODEL
 ```
 
-打开 **<http://localhost:8080>**
+`.env` 是 app 与 worker 的唯一配置来源，通过 Compose 的 `env_file` 注入。不要把 API Key 提交到版本库。
 
-`.env` 是 `app`/`worker` 的**唯一权威来源**：它通过 compose 的 `env_file` 注入，宿主机同名环境变量
-（例如机器级的 `LLM_MODEL`）无法覆盖它。
-
-- 前端页面与 API/WS 同源；浏览器请求 `/api/commerce/*` 与 `/ws/commerce/events`。
-- Compose 默认不向宿主机暴露 FastAPI `8000`；如需直接调试，可临时为 `app` 加 `ports: ["8000:8000"]`。
-- 数据由 `globex_app-data`、`globex_redis-data`、`globex_qdrant-data` 三个 volume 持久化。
-- 首次启动幂等补充缺失的虚构商品与演示订单，**不会覆盖**既有同 ID 数据。
-
-常用验证：
+### 2. 启动完整服务
 
 ```bash
-docker compose -f docker/docker-compose.yaml ps
+docker compose --project-name globex \
+  --env-file .env \
+  -f docker/docker-compose.yaml \
+  up -d --build
+```
+
+浏览器打开：**<http://localhost:8080>**
+
+服务数据由以下命名卷持久化：
+
+- `globex_app-data`
+- `globex_redis-data`
+- `globex_qdrant-data`
+
+应用启动时会幂等同步商品目录和订单数据、构建 420 个商品向量，并刷新品类知识索引。
+
+### 3. 检查状态
+
+```bash
+docker compose --project-name globex \
+  --env-file .env \
+  -f docker/docker-compose.yaml ps
+
 curl http://localhost:8080/healthz
 curl http://localhost:8080/api/health
 ```
 
-> 注意：`docker compose up -d --build app worker` 未加 `--no-deps` 时，依赖协调可能与正在运行的
-> qdrant 争抢 `6333` 端口而整体中止，导致 app 换新、worker 留旧。**只重建后端时请加 `--no-deps`。**
+只重建后端时使用 `--no-deps`，避免重建 Redis 和 Qdrant：
+
+```bash
+docker compose --project-name globex \
+  --env-file .env \
+  -f docker/docker-compose.yaml \
+  up -d --build --no-deps app worker
+```
 
 ---
 
@@ -163,14 +186,11 @@ curl http://localhost:8080/api/health
 
 ```bash
 uv sync
-cp .env.example .env   # 首次运行：填好 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
+cp .env.example .env
 uv run uvicorn app.presentation.server:app --port 8000
 ```
 
-应用启动时经 `load_dotenv` 读取同一份 `.env` 并以它为准（覆盖进程内同名变量）；
-也可直接用 `scripts/run_qwen_backend.ps1`，它会先通过 `scripts/load_env.ps1` 加载 `.env` 再启动。
-
-如启用 Redis 队列，另起一个终端：
+如启用 Redis 队列，另开终端运行：
 
 ```bash
 uv run python -m app.worker
@@ -184,75 +204,91 @@ npm ci
 npm run dev
 ```
 
-Vite 已将 `/api` 与 `/ws` 代理至本机 `http://localhost:8000`，无需另配跨域地址。
+Vite 会把 `/api` 与 `/ws` 代理至 `http://localhost:8000`。
 
 ---
 
-## 受控模拟订单 API
+## Commerce API
 
 ```text
-POST   /commerce/order-quotes                     报价（无副作用）
-POST   /commerce/orders                           创建（必须带 Idempotency-Key）
-POST   /commerce/orders/{order_id}/cancellations  取消
-DELETE /commerce/orders/{order_id}                逻辑删除（body 带一次性控制令牌）
-GET    /commerce/orders?limit=1..50               列表
-GET    /commerce/orders/{order_id}                详情
+POST   /commerce/order-quotes                     计算到手价
+POST   /commerce/orders                           创建订单（需要 Idempotency-Key）
+POST   /commerce/orders/{order_id}/cancellations  取消订单
+DELETE /commerce/orders/{order_id}                逻辑删除订单
+GET    /commerce/orders?limit=1..50               获取订单列表
+GET    /commerce/orders/{order_id}                获取订单详情
 ```
 
-示例（所有金额均为静态规则的演示估算）：
+示例：
 
 ```bash
 curl http://localhost:8080/api/commerce/orders
-curl http://localhost:8080/api/commerce/orders/DEMO-CN-24001
+curl http://localhost:8080/api/commerce/orders/GBX-CN-24001
+
 curl -X POST http://localhost:8080/api/commerce/order-quotes \
   -H "Content-Type: application/json" \
   -d '{"items":[{"product_id":"P1001","sku_id":"P1001-S1","quantity":1}],
        "destination_country":"US","currency":"USD"}'
 ```
 
-聊天 Agent 的商品卡只能打开订单草案；草案先请求服务端重新报价，只有用户点击
-「确认创建模拟订单」才会发起创建。创建只接受虚构目录商品、目的市场与显示币种，不接受真实地址。
+商品卡只负责打开订单确认；服务端会重新校验 SKU、目的市场和费用。用户点击“确认创建订单”后才会提交创建请求。
 
 ---
 
 ## 质量验证
 
 ```bash
-uv run pytest                          # 338 项测试
-cd frontend && npm run build           # tsc -b && vite build（含类型检查）
+uv run pytest -q
+cd frontend && npm run build
 ```
 
-前端镜像的构建阶段就会执行 `tsc -b && vite build`，因此**镜像构建成功即证明类型检查通过**。
+当前完整测试套件为 **342 passed**。前端生产构建执行 `tsc -b && vite build`，同时完成 TypeScript 类型检查和资源构建。
 
-测试覆盖领域规则、检索与降级、缓存、队列、SQL 仓储、商品数据底座、Agent 护栏与权限、
-偏好记忆、模拟订单全流程（含 HTTP 契约、幂等、取消、逻辑删除）与种子幂等性。
+测试覆盖：
+
+- 领域对象与金额规则
+- 商品目录规模和检索排序回归
+- 向量召回、rerank 和关键词降级
+- 缓存、Redis 队列与跨进程事件流
+- SQLite 仓储与启动幂等
+- Agent 权限、序列护栏和上下文策略
+- 报价、订单幂等、取消、逻辑删除与公开 DTO 隐私
+- 用户可见文案与知识文档回归
 
 评测与压测：
 
 ```bash
-uv run python scripts/eval_regression.py     # 召回回归（商品 / 品类）
-uv run python scripts/smoke_e2e.py           # 端到端冒烟
-uv run python scripts/loadtest.py            # 或 scripts/locustfile.py
+uv run python scripts/eval_regression.py
+uv run python scripts/smoke_e2e.py
+uv run python scripts/loadtest.py
+# 或：uv run locust -f scripts/locustfile.py
 ```
 
 ---
 
-## 已知边界
+## 服务边界
 
-要从受控模拟订单进入真实交易，必须先单独实现真实认证与授权、账户归属、地址与隐私合规、
-正式报价确认、库存预占、支付/退款状态机、支付回调验证、履约、审计日志与保留策略。
-**不得**将当前的模拟控制令牌、静态费用规则或模拟写接口直接复用为真实交易能力。
+当前版本专注于购物决策、费用估算和订单管理。若用于生产交易，还需要接入并验证：
+
+- 用户认证、授权与订单归属
+- 收货地址和隐私合规
+- 实时报价与库存预占
+- 支付、退款和支付回调验签
+- 仓储、承运商、物流追踪与售后
+- 审计日志、数据保留和合规策略
+
+现有一次性管理凭证、静态费用规则和订单写接口不应直接当作生产支付或履约能力使用。
 
 ---
 
-## 文档
+## 相关文档
 
 | 文档 | 内容 |
 | --- | --- |
-| [`docs/SIMULATED_ORDERS_V1_DESIGN.md`](docs/SIMULATED_ORDERS_V1_DESIGN.md) | 模拟订单的产品、数据、API、隐私与测试契约 |
-| [`docs/MVP_READONLY_ORDERS.md`](docs/MVP_READONLY_ORDERS.md) | 产品与部署边界说明 |
-| [`docs/catalog-data-foundation.md`](docs/catalog-data-foundation.md) | 商品数据底座：表结构、导入顺序与索引流程 |
-| [`docs/embedding-rag-vectorrecord-incident.md`](docs/embedding-rag-vectorrecord-incident.md) | Embedding 网关导致知识库写入失败的根因与防回归 |
+| [`docs/catalog-data-foundation.md`](docs/catalog-data-foundation.md) | 商品目录表结构、导入顺序与索引流程 |
+| [`docs/embedding-rag-vectorrecord-incident.md`](docs/embedding-rag-vectorrecord-incident.md) | Embedding 网关与知识库写入故障复盘 |
+| [`docs/MVP_READONLY_ORDERS.md`](docs/MVP_READONLY_ORDERS.md) | 订单能力与部署边界 |
+| [`docs/agent-memory.md`](docs/agent-memory.md) | 项目约束、关键决策与交接记忆 |
 
 ---
 
