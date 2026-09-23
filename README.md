@@ -4,7 +4,7 @@
 
 Globex 基于 AgentScope 2.x、FastAPI、SQLite、Redis、Qdrant、React 与 Vite 构建，可通过 Docker Compose 一键部署。它覆盖从自然语言找货、品类知识辅助决策、结构化商品推荐，到报价确认和订单管理的完整购物链路。
 
-> **作者**：**jerry** ｜ 仓库：<https://github.com/scutjerry/gloshopping-agent>
+> **作者**：**jerry** ｜ 仓库：[scutjerry/globlex-a-global-shopping-agent](https://github.com/scutjerry/globlex-a-global-shopping-agent)
 >
 > **当前服务范围**：页面支持商品检索、规格比较、跨币种费用估算、订单创建、取消与逻辑删除。当前版本未接入支付机构、承运商和外部履约系统，因此不会实际扣款、退款、发货或变更库存；费用以结算页显示为准。订单写操作必须由用户在页面中明确确认，Agent 不会代替用户提交。
 
@@ -290,7 +290,6 @@ uv run python scripts/loadtest.py
 | [`docs/catalog-data-foundation.md`](docs/catalog-data-foundation.md) | 商品目录表结构、导入顺序与索引流程 |
 | [`docs/embedding-rag-vectorrecord-incident.md`](docs/embedding-rag-vectorrecord-incident.md) | Embedding 网关与知识库写入故障复盘 |
 | [`docs/MVP_READONLY_ORDERS.md`](docs/MVP_READONLY_ORDERS.md) | 订单能力与部署边界 |
-| [`docs/agent-memory.md`](docs/agent-memory.md) | 项目约束、关键决策与交接记忆 |
 
 ---
 
